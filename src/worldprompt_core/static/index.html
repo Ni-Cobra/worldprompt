@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WorldPrompt Core</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icon.png" type="image/png" sizes="256x256" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside>
+        <a class="brand" href="#"
+          ><svg class="logo" viewBox="0 0 512 512" aria-hidden="true">
+            <defs>
+              <mask id="logo-cuts" maskUnits="userSpaceOnUse" x="-200" y="-500" width="400" height="520">
+                <rect x="-200" y="-500" width="400" height="520" fill="#fff" />
+                <path d="M-62,-214 L-28,-196 L-62,-188 Z" fill="#000" />
+                <path d="M1,-96 Q4,-260 32,-392" fill="none" stroke="#000" stroke-width="9" stroke-linecap="round" />
+              </mask>
+            </defs>
+            <g transform="translate(256,256) scale(1.0434) translate(-275.06,-272.19)">
+              <g transform="translate(184,444) rotate(34) scale(1.171,0.96)" mask="url(#logo-cuts)" fill="currentColor">
+                <path d="M0,-62 C-52,-112 -72,-232 -46,-322 C-26,-378 14,-410 48,-424 C56,-342 62,-232 42,-152 C30,-104 16,-76 0,-62 Z" />
+                <path d="M-12,-80 L12,-80 L4,-4 Q0,4 -4,-4 Z" />
+              </g>
+              <g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round">
+                <g transform="rotate(-10 140 410)" stroke-width="6.6"><polygon points="140,380 166,395 166,425 140,440 114,425 114,395" /><path d="M114,395 L140,410 L166,395 M140,410 L140,440" /></g>
+                <g transform="rotate(8 134 214)" stroke-width="12.1"><polygon points="134,159 181.6,186.5 181.6,241.5 134,269 86.4,241.5 86.4,186.5" /><path d="M86.4,186.5 L134,214 L181.6,186.5 M134,214 L134,269" /></g>
+                <g transform="rotate(-2 100 326)" stroke-width="8.8"><polygon points="100,286 134.6,306 134.6,346 100,366 65.4,346 65.4,306" /><path d="M65.4,306 L100,326 L134.6,306 M100,326 L100,366" /></g>
+              </g>
+            </g></svg
+          ><span>WorldPrompt<small>CORE</small></span></a
+        ><a class="project-link" href="https://github.com/Ni-Cobra/worldprompt" target="_blank" rel="noopener noreferrer"
+          >Help and source on GitHub ↗</a
+        >
+        <nav aria-label="Settings sections">
+          <a href="#connection" class="nav-item">Connection</a
+          ><a href="#provider" class="nav-item">AI provider</a
+          ><a href="#preferences" class="nav-item">Preferences</a
+          ><a href="#activity" class="nav-item">Activity</a
+          ><a href="#advanced" class="nav-item">Advanced settings</a>
+        </nav>
+        <div class="sidebar-bottom">
+          <span id="version" class="muted">WorldPrompt Core</span>
+          <p class="credit">
+            Made by <strong>NiCobra</strong><br />Visit my other creations:
+            <a href="https://maniacobra.com" target="_blank" rel="noopener noreferrer">maniacobra.com ↗</a><br /><br />
+            <a href="https://discord.gg/p5aHPnXAgB" target="_blank" rel="noopener noreferrer">Join the Discord ↗</a>
+          </p>
+        </div>
+      </aside>
+      <main>
+        <header>
+          <div>
+            <h1>Settings and activity</h1>
+            <p class="intro">
+              Configure your AI provider and Minecraft connection, and view job progress.
+            </p>
+          </div>
+          <span id="service-status" class="pill">Connecting…</span>
+        </header>
+        <div id="notice" hidden>
+          <span id="notice-text" role="status" aria-live="polite"></span
+          ><button type="button" id="notice-close" class="text-button" aria-label="Dismiss message">×</button>
+        </div>
+        <div id="restart" class="notice warning" hidden>
+          Settings saved. Restart Core to apply changes to ports or storage.
+          Your current connection is still running.
+        </div>
+        <form id="settings">
+          <section id="connection" class="panel">
+            <div class="section-heading">
+              <div>
+                <h2>Minecraft connection</h2>
+              </div>
+              <span class="tag">FABRIC 26.3</span>
+            </div>
+            <p>
+              Install the WorldPrompt mod and Fabric API. On the same
+              computer and user account, the mod discovers Core automatically.
+            </p>
+            <div class="connection-bar" data-state="running">
+              <span class="signal" aria-hidden="true"></span>
+              <div>
+                <strong>Local Minecraft service</strong
+                ><code id="world-url">—</code>
+              </div>
+              <span id="world-status" class="muted">Ready for the mod</span>
+            </div>
+            <details>
+              <summary>Connect a specific Minecraft installation</summary>
+              <p>
+                Use this for an existing configuration, WSL, or a custom game
+                folder. Other mod settings are preserved and backed up.
+              </p>
+              <label
+                >Minecraft instance folder<input
+                  name="minecraft_dir"
+                  placeholder="Folder containing mods and config"
+                  autocomplete="off" /></label
+              ><button type="button" id="connect-game" class="secondary">
+                Save Minecraft connection
+              </button>
+              <p class="hint">
+                Restart Minecraft after saving its connection settings.
+              </p>
+            </details>
+          </section>
+          <section id="provider" class="panel">
+            <div class="section-heading">
+              <div>
+                <h2>AI provider</h2>
+              </div>
+            </div>
+            <p>
+              Sign in through your provider CLI, then check the connection here.
+            </p>
+            <div class="provider-grid">
+              <label class="provider-card"
+                ><input
+                  type="radio"
+                  name="provider"
+                  value="codex"
+                  checked
+                /><span class="provider-symbol">◎</span
+                ><strong>Codex CLI</strong
+                ><span>Connect with your ChatGPT account</span
+                ><span class="provider-state" id="codex-status"
+                  >Not checked</span
+                ></label
+              ><label class="provider-card"
+                ><input type="radio" name="provider" value="claude" /><span
+                  class="provider-symbol claude-symbol"
+                  >✳</span
+                ><strong>Claude CLI</strong
+                ><span>Connect with your Claude subscription</span
+                ><span class="provider-state" id="claude-status"
+                  >Not checked</span
+                ></label
+              >
+            </div>
+            <div class="provider-options" data-provider="codex">
+              <label>Codex model
+                <select name="codex_model" aria-describedby="codex-models-message">
+                  <option value="">CLI default</option>
+                  <option value=" custom">Custom model…</option>
+                </select>
+              </label>
+              <label id="codex-custom-label" hidden>Custom model ID
+                <input id="codex-custom-model" spellcheck="false" maxlength="128" disabled />
+              </label>
+              <button type="button" class="secondary" data-refresh-models="codex">Refresh models</button>
+              <p class="hint" id="codex-models-message" aria-live="polite">Models load from your configured CLI.</p>
+              <label>Reasoning effort
+                <select name="codex_reasoning_effort" aria-describedby="codex-efforts-message"></select>
+              </label>
+              <p class="hint" id="codex-efforts-message" aria-live="polite">Levels load with the model list.</p>
+              <label class="checkbox-field"><input type="checkbox" name="codex_fast_mode" /> Fast mode</label>
+              <p class="hint">Requests faster responses. Availability and usage rates depend on your model and account.</p>
+              <details>
+                <summary>Codex executable</summary>
+                <label
+                  >Command arguments (JSON array)<input
+                    name="codex_command"
+                    value=""
+                    placeholder="Find automatically"
+                    spellcheck="false"
+                /></label>
+                <p class="hint">
+                  Leave empty to find an installed CLI automatically. A successful check fills
+                  in its path. Save settings to use it for future jobs.
+                </p>
+                <a
+                  href="https://developers.openai.com/codex/cli"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Install Codex CLI ↗</a
+                >
+              </details>
+            </div>
+            <div class="provider-options" data-provider="claude" hidden>
+              <label>Claude model
+                <select name="claude_model" aria-describedby="claude-models-message">
+                  <option value="">CLI default</option>
+                  <option value=" custom">Custom model…</option>
+                </select>
+              </label>
+              <label id="claude-custom-label" hidden>Custom model ID
+                <input id="claude-custom-model" spellcheck="false" maxlength="128" disabled />
+              </label>
+              <button type="button" class="secondary" data-refresh-models="claude">Refresh models</button>
+              <p class="hint" id="claude-models-message" aria-live="polite">Models load from your configured CLI.</p>
+              <label>Reasoning effort
+                <select name="claude_reasoning_effort" aria-describedby="claude-efforts-message"></select>
+              </label>
+              <p class="hint" id="claude-efforts-message" aria-live="polite">Levels load with the model list.</p>
+              <label class="checkbox-field"><input type="checkbox" name="claude_fast_mode" /> Fast mode</label>
+              <p class="hint">Requires a supported Opus model and usage credits. Fast mode has higher usage rates.</p>
+              <details>
+                <summary>Claude executable</summary>
+                <label
+                  >Command arguments (JSON array)<input
+                    name="claude_command"
+                    value=""
+                    placeholder="Find automatically"
+                    spellcheck="false"
+                /></label>
+                <p class="hint">
+                  Leave empty to find an installed CLI automatically. A successful check fills
+                  in its path. Save settings to use it for future jobs.
+                </p>
+                <a
+                  href="https://code.claude.com/docs/en/setup"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Install Claude CLI ↗</a
+                >
+              </details>
+            </div>
+            <p class="hint">
+              In a terminal, run <code>codex login</code> or
+              <code>claude auth login</code> using the configured CLI on this
+              computer, under the same user account as Core.
+            </p>
+            <div class="actions">
+              <button type="button" id="check-provider" class="secondary">
+                Check connection
+              </button>
+              <button type="submit" id="save-provider">Save settings</button>
+              <span class="save-hint" aria-live="polite"></span>
+            </div>
+            <p id="provider-message" class="hint" aria-live="polite">
+              The CLI keeps your credentials.
+            </p>
+            <div class="support-note">
+              API connections are not supported yet. Feel free to fork this project!
+            </div>
+          </section>
+          <section id="preferences" class="panel">
+            <div class="section-heading">
+              <div>
+                <h2>Job limits</h2>
+              </div>
+            </div>
+            <label class="checkbox-field"
+              ><input type="checkbox" name="job_limits" /> Apply job
+              limits</label
+            >
+            <div class="fields" id="job-limit-fields">
+              <label
+                >Single pass timeout <span>seconds per pass</span
+                ><input
+                  name="timeout_seconds"
+                  type="number"
+                  min="1"
+                  required /></label
+              ><label
+                >Double pass timeout <span>seconds per pass, two passes</span
+                ><input
+                  name="high_timeout_seconds"
+                  type="number"
+                  min="1"
+                  required /></label
+              ><label
+                >Operation limit <span>operations per plan, every pass</span
+                ><input
+                  name="max_operations"
+                  type="number"
+                  min="1"
+                  max="512"
+                  required /></label
+              ><label
+                >Concurrent jobs <span>maximum active planners</span
+                ><input
+                  name="world_concurrency"
+                  type="number"
+                  min="1"
+                  max="16"
+                  required /></label
+              ><label
+                >Queue capacity <span>maximum active and waiting jobs</span
+                ><input
+                  name="world_max_pending"
+                  type="number"
+                  min="1"
+                  max="256"
+                  required /></label
+              ><label
+                >Jobs per player <span>active and waiting</span
+                ><input
+                  name="world_max_jobs_per_player"
+                  type="number"
+                  min="1"
+                  max="256"
+                  required
+              /></label>
+            </div>
+            <p class="hint">
+              When off, Core limits none of these. They control local work and
+              waiting time, not tokens or spending.
+            </p>
+            <div class="save-row">
+              <button type="submit" id="save">Save settings</button>
+              <span class="save-hint" aria-live="polite"></span>
+            </div>
+          </section>
+        </form>
+        <section id="activity" class="panel">
+          <div class="section-heading">
+            <div>
+              <h2>Recent jobs</h2>
+            </div>
+            <span id="job-count" class="tag">0 JOBS</span>
+          </div>
+          <div class="history-toolbar">
+            <p id="history-hint" class="hint">Finished jobs are stored on this computer.</p>
+            <button id="clear-jobs" type="button" class="secondary" disabled>Clear finished</button>
+          </div>
+          <div id="jobs">
+            <div class="empty">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><polygon points="12,2.5 20.5,7.25 20.5,16.75 12,21.5 3.5,16.75 3.5,7.25" /><path d="M3.5,7.25 L12,12 L20.5,7.25 M12,12 L12,21.5" /></g></svg
+              ><strong>No recent jobs.</strong>
+              <p>Use <code>/wp prompt</code> after selecting two corners.</p>
+            </div>
+          </div>
+        </section>
+        <details id="advanced" class="panel advanced">
+          <summary><h2>Advanced settings</h2></summary>
+          <p>Ports, job storage and the Minecraft adapter token. Changes here take effect after a Core restart.</p>
+          <div class="fields">
+            <label
+              >Settings GUI port<input
+                form="settings"
+                name="port"
+                type="number"
+                min="1"
+                max="65535"
+                required /></label
+            ><label
+              >Minecraft service port<input
+                form="settings"
+                name="world_port"
+                type="number"
+                min="1"
+                max="65535"
+                required /></label
+            ><label
+              >Adapter lease
+              <span>seconds before a disconnected job cancels</span
+              ><input
+                form="settings"
+                name="world_lease_seconds"
+                type="number"
+                min="10"
+                max="86400"
+                required
+            /></label>
+          </div>
+          <label
+            >Job storage directory<input
+              form="settings"
+              name="jobs_dir"
+              required
+              autocomplete="off" /></label
+          ><label
+            >Custom adapter token file
+            <span>leave empty to manage automatically</span
+            ><input form="settings" name="world_token_file" autocomplete="off"
+          /></label>
+          <p id="world-port-warning" class="notice warning" hidden>
+            After restarting Core, the mod follows the new Minecraft
+            service port automatically. An instance set up with
+            <strong>Connect a specific Minecraft installation</strong> keeps
+            the old port: connect it again, then restart Minecraft.
+          </p>
+          <p class="hint">
+            Job artifacts include prompts, captured blocks, previews and
+            model responses. Keep this folder private.
+          </p>
+          <p class="hint">Settings file: <code id="config-path">—</code></p>
+          <div class="save-row">
+            <button type="submit" form="settings">Save settings</button>
+            <span class="save-hint" aria-live="polite"></span>
+          </div>
+        </details>
+        <footer>
+          <span
+            >WorldPrompt Core · <span id="footer-version">1.0.0</span></span
+          ><span class="footer-credit"
+            >Made by NiCobra ·
+            <a href="https://maniacobra.com" target="_blank" rel="noopener noreferrer">maniacobra.com ↗</a></span
+          ><button id="stop-core" class="text-button" type="button">
+            Stop Core
+          </button>
+        </footer>
+      </main>
+    </div>
+    <dialog id="command-warning" aria-labelledby="command-warning-title" aria-describedby="command-warning-message">
+      <h2 id="command-warning-title">CLI connection failed</h2>
+      <p id="command-warning-message"></p>
+      <div class="dialog-actions">
+        <button type="button" id="command-warning-ok" class="secondary" autofocus>OK</button>
+        <button type="button" id="command-warning-find">Find automatically</button>
+      </div>
+    </dialog>
+  </body>
+</html>

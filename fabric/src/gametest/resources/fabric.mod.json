@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "worldprompt-test",
+  "version": "1.0.0",
+  "name": "WorldPrompt automated world tests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": ["dev.worldprompt.WorldPromptGameTest", "dev.worldprompt.WorldPromptFlowTest", "dev.worldprompt.BlockPropertyRegistryTest", "dev.worldprompt.WorldPromptRegressionTest", "dev.worldprompt.WorldPromptMultiJobTest", "dev.worldprompt.LecternPromptGameTest", "dev.worldprompt.PermissionNodeGameTest"]
+  },
+  "depends": {"worldprompt": "*", "fabric-gametest-api-v1": "*"}
+}

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "worldprompt-core"
+version = "1.0.0"
+description = "Local Minecraft planning service and settings GUI for Codex and Claude CLI"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26,<3", "Pillow>=10,<13", "pystray>=0.19.5,<0.20; sys_platform == 'win32'"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+build = ["pyinstaller>=6.16,<7"]
+
+[project.scripts]
+worldprompt-core = "worldprompt_core.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+worldprompt_core = ["static/*", "static/fonts/*", "schemas/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

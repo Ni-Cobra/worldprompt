@@ -1,0 +1,18 @@
+[Unit]
+Description=WorldPrompt Core Minecraft planning service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/worldprompt
+ExecStart=%h/worldprompt/.venv/bin/worldprompt-core serve --no-browser --no-tray
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+UMask=0077
+
+[Install]
+WantedBy=default.target

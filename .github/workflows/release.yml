@@ -1,0 +1,101 @@
+name: Release
+
+# Core and the Fabric mod version independently, so each releases under its own tag:
+#   core-v1.0.0    builds the Windows bundle, Linux bundle and wheel
+#   fabric-v1.0.0  builds the mod jar
+# The tag must match the version in the source at the tagged commit. Review the
+# draft release and its notes on GitHub, then publish it.
+on:
+  push:
+    tags: ['core-v*', 'fabric-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-22.04
+    outputs:
+      component: ${{ steps.tag.outputs.component }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag against the source version
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^(core|fabric)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Tag '$TAG' must look like core-vX.Y.Z or fabric-vX.Y.Z."
+            exit 1
+          fi
+          component="${BASH_REMATCH[1]}"
+          version="${BASH_REMATCH[2]}"
+          if [ "$component" = core ]; then
+            py=$(sed -n 's/^version = "\(.*\)"$/\1/p' pyproject.toml)
+            init=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/worldprompt_core/__init__.py)
+            if [ "$py" != "$version" ] || [ "$init" != "$version" ]; then
+              echo "::error::Tag $TAG does not match Core's source (pyproject.toml $py, __init__.py $init)."
+              exit 1
+            fi
+          else
+            mod=$(sed -n 's/^version=//p' fabric/gradle.properties)
+            if [ "$mod" != "$version" ]; then
+              echo "::error::Tag $TAG does not match fabric/gradle.properties ($mod)."
+              exit 1
+            fi
+          fi
+          echo "component=$component" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    uses: ./.github/workflows/build.yml
+    with:
+      components: ${{ needs.plan.outputs.component }}
+
+  publish:
+    needs: [plan, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          pattern: worldprompt-${{ needs.plan.outputs.component }}*
+          merge-multiple: true
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          COMPONENT: ${{ needs.plan.outputs.component }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          cd release
+          # Every file must belong to this tag's component and version.
+          if [ "$COMPONENT" = core ]; then
+            allowed='^(WorldPrompt-Core-VERSION-(linux|windows)-x86_64\.(tar\.gz|zip)|worldprompt_core-VERSION-.*\.whl)$'
+            title="WorldPrompt Core $VERSION"
+          else
+            allowed='^worldprompt-VERSION\.jar$'
+            title="WorldPrompt Fabric mod $VERSION"
+          fi
+          allowed="${allowed//VERSION/${VERSION//./\\.}}"
+          for file in *; do
+            if [[ ! "$file" =~ $allowed ]]; then
+              echo "::error::Unexpected release file '$file' for $TAG."
+              exit 1
+            fi
+          done
+          sha256sum -- * > SHA256SUMS.txt
+          ls -la
+          # Notes cover changes since the previous release of the same component only.
+          previous=$(git tag --list "${COMPONENT}-v*" --sort=-v:refname | grep -vx -- "$TAG" | head -n 1 || true)
+          notes=()
+          if [ -n "$previous" ]; then notes=(--notes-start-tag "$previous"); fi
+          gh release create "$TAG" --draft --verify-tag \
+            --title "$title" --generate-notes "${notes[@]}" -- *

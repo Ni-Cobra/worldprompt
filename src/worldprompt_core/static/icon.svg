@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>WorldPrompt</title>
+  <clipPath id="round"><circle cx="256" cy="256" r="256"/></clipPath>
+  <g clip-path="url(#round)">
+  <rect width="512" height="512" fill="#ffffff"/>
+  <defs>
+    <mask id="feather-cuts" maskUnits="userSpaceOnUse" x="-200" y="-500" width="400" height="520">
+      <rect x="-200" y="-500" width="400" height="520" fill="#fff"/>
+      <path d="M-62,-214 L-28,-196 L-62,-188 Z" fill="#000"/>
+      <path d="M1,-96 Q4,-260 32,-392" fill="none" stroke="#000" stroke-width="9" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g transform="translate(256,256) scale(1.0434) translate(-275.06,-272.19)">
+  <g transform="translate(184,444) rotate(34) scale(1.171,0.96)">
+    <g mask="url(#feather-cuts)">
+      <path d="M0,-62 C-52,-112 -72,-232 -46,-322 C-26,-378 14,-410 48,-424 C56,-342 62,-232 42,-152 C30,-104 16,-76 0,-62 Z" fill="#000"/>
+      <path d="M-12,-80 L12,-80 L4,-4 Q0,4 -4,-4 Z" fill="#000"/>
+    </g>
+  </g>
+  <g fill="#ffffff" stroke="#000000" stroke-linejoin="round" stroke-linecap="round">
+    <g transform="rotate(-10 140 410)" stroke-width="6.6"><polygon points="140.0,380.0 166.0,395.0 166.0,425.0 140.0,440.0 114.0,425.0 114.0,395.0"/><path d="M114.0,395.0 L140,410 L166.0,395.0 M140,410 L140,440"/></g>
+    <g transform="rotate(8 134 214)" stroke-width="12.1"><polygon points="134.0,159.0 181.6,186.5 181.6,241.5 134.0,269.0 86.4,241.5 86.4,186.5"/><path d="M86.4,186.5 L134,214 L181.6,186.5 M134,214 L134,269"/></g>
+    <g transform="rotate(-2 100 326)" stroke-width="8.8"><polygon points="100.0,286.0 134.6,306.0 134.6,346.0 100.0,366.0 65.4,346.0 65.4,306.0"/><path d="M65.4,306.0 L100,326 L134.6,306.0 M100,326 L100,366"/></g>
+  </g>
+  </g>
+  </g>
+</svg>

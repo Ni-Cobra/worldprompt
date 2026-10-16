@@ -1,0 +1,76 @@
+name: Build and verify
+
+on:
+  push:
+    # Tags run through release.yml, which calls this workflow.
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      # 'core' or 'fabric' builds only that component (releases use this);
+      # empty or 'all' builds both, as for pushes and pull requests.
+      components:
+        type: string
+        default: all
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'core' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install build and test dependencies
+        run: python -m pip install ".[test,build]"
+      - name: Verify Core
+        run: python -m pytest -q
+      - name: Build and verify native executable
+        env:
+          WORLDPROMPT_MAX_GLIBC: ${{ matrix.os == 'ubuntu-22.04' && '2.35' || '' }}
+        run: python scripts/build_core.py
+      - name: Build Python wheel
+        if: runner.os == 'Linux'
+        run: python -m pip wheel . --no-deps -w dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worldprompt-core-${{ matrix.os }}
+          path: |
+            dist/WorldPrompt-Core-*.zip
+            dist/WorldPrompt-Core-*.tar.gz
+            dist/worldprompt_core-*.whl
+          if-no-files-found: error
+
+  fabric:
+    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'fabric' }}
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: fabric
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+      - name: Build mod, JUnit tests and isolated Minecraft GameTests
+        run: ./gradlew build
+      - name: Read mod version
+        id: mod_version
+        run: echo "value=$(sed -n 's/^version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worldprompt-fabric
+          path: fabric/build/libs/worldprompt-${{ steps.mod_version.outputs.value }}.jar
+          if-no-files-found: error

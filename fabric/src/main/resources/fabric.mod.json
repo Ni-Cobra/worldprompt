@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "worldprompt",
+  "version": "${version}",
+  "name": "WorldPrompt",
+  "description": "Select and prompt bounded Minecraft regions using WorldPrompt Core and your Codex or Claude CLI.",
+  "license": "MIT",
+  "contact": {
+    "homepage": "https://github.com/Ni-Cobra/worldprompt",
+    "sources": "https://github.com/Ni-Cobra/worldprompt",
+    "issues": "https://github.com/Ni-Cobra/worldprompt/issues"
+  },
+  "icon": "assets/worldprompt/icon.png",
+  "environment": "*",
+  "entrypoints": { "main": ["dev.worldprompt.WorldPrompt"] },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "java": ">=25",
+    "fabric-api": ">=0.161.0+26.3",
+    "fabric-permissions-api-v0": ">=0.7.0"
+  }
+}

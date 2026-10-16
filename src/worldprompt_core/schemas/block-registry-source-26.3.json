@@ -1,0 +1,11 @@
+{
+  "blocks": 1286,
+  "minecraft_version": "26.3",
+  "report_sha256": "7a0de8aaf7b04d00c40b8ffdc4cfe75184cff2e821d336a020573201867105a4",
+  "server": {
+    "sha1": "33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c",
+    "size": 62294556,
+    "url": "https://piston-data.mojang.com/v1/objects/33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c/server.jar"
+  },
+  "states": 35723
+}

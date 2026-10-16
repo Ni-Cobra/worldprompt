@@ -1,0 +1,5 @@
+.gradle/
+.tools/
+build/
+run/
+run-test/
