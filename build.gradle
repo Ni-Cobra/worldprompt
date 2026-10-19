@@ -1,0 +1,11 @@
+plugins { id 'base' }
+
+def modProperties = new Properties()
+file('fabric/gradle.properties').withInputStream { modProperties.load(it) }
+subprojects {
+    modProperties.each { key, value -> ext.set(key.toString(), value) }
+    version = modProperties.getProperty('version')
+    group = modProperties.getProperty('group')
+}
+tasks.named('build') { dependsOn ':fabric:build', ':neoforge:build' }
+tasks.named('check') { dependsOn ':fabric:check', ':neoforge:check' }

@@ -1,6 +1,6 @@
 # Core and mod protocol
 
-The contract between WorldPrompt Core (`world_server.py`, `world_jobs.py`, `replay.py`) and the Fabric mod (`CoreClient`, `CoreJobDriver`, `ReplayPayload`, `ReplayPlacer`). It is enough to write a compatible client or server. How Core runs jobs internally is in [architecture.md](architecture.md); the plan format is in [planner.md](planner.md).
+The contract between WorldPrompt Core (`world_server.py`, `world_jobs.py`, `replay.py`) and both mod loaders’ shared code (`CoreClient`, `CoreJobDriver`, `ReplayPayload`, `ReplayPlacer`). It is enough to write a compatible client or server. How Core runs jobs internally is in [architecture.md](architecture.md); the plan format is in [planner.md](planner.md).
 
 All traffic is JSON over plain HTTP on loopback. The mod is the only client Core is designed for; Core never calls the mod.
 
@@ -94,6 +94,7 @@ All paths are under `/api/world`. `{id}` is the job UUID, which the client choos
 {"request_id": "<uuid>", "owner_id": "<player uuid>", "owner_name": "Alice",
  "prompt": "a small stone tower", "effort": "normal",
  "source": {"dimensions": [w, h, l], "palette": ["minecraft:air", "..."], "blocks": [0, 0, 1, "..."], "data_version": 4901},
+ "block_catalog": {"minecraft_version": "26.3", "blocks": {"minecraft:stone": {"properties": {}, "defaults": {}}, "mod:beam": {"properties": {"axis": ["x", "y", "z"]}, "defaults": {"axis": "y"}}}},
  "viewpoint": {"position": [x,y,z], "eye_position": [x,y,z], "look_direction": [x,y,z], "yaw": 0.0, "pitch": 0.0,
                "dimension": "minecraft:overworld", "selection_origin": [x, y, z]},
  "lecterns": [{"position": [x,y,z], "world_position": [x,y,z], "text": "..."}]}
@@ -106,10 +107,11 @@ All paths are under `/api/world`. `{id}` is the job UUID, which the client choos
 | `prompt` | Non-empty, at most 64,000 UTF-8 bytes (`MAX_PROMPT_BYTES`). |
 | `effort` | `normal` (Single pass) or `high` (Double pass). Default `normal`. |
 | `source` | `dimensions` are three integers 1 to 32767 with at most 4,000,000 blocks in total. `palette` is a list of unique block-state strings (1 to 65,536). `blocks` has one palette index per cell in the order below. `data_version` is an optional integer. |
+| `block_catalog` | Optional snapshot from the running server. It contains a nonblank `minecraft_version` (at most 128 characters) and `blocks`. Each namespaced block maps to exactly `properties` (lowercase property names to nonempty unique value arrays) and `defaults` (one value for each property, included in its domain). Property values must match Minecraft 26.3's registered state-name syntax (`[a-z0-9_]+`). The catalog may contain vanilla and modded IDs. Core limits the UTF-8 JSON to 16 MiB, blocks to 65,536, properties to 64 per block and 1,000,000 total, and values to 256 per property and 4,000,000 total. A malformed catalog rejects submission. If an older mod or offline caller omits it, Core uses its bundled 26.3 vanilla catalog. |
 | `viewpoint` | Optional, but when present it needs exactly the keys shown. `look_direction` is a unit vector and `selection_origin` holds the world coordinates of the selection's minimum corner. |
 | `lecterns` | Optional list of prompt lecterns inside the selection (limits in [planner.md](planner.md#prompt-lecterns)). `position` is local; the block there must be a lectern in `source`. |
 
-Other keys are ignored. Cell order is x fastest, then z, then y: index `x + z * width + y * width * length`. Coordinates in plans, lecterns and runs are local to the selection and start at 0. Resubmitting an existing `request_id` with a byte-identical request returns the current job and renews its lease; with different data it is a 400. A request that would give one `owner_id` more unfinished jobs than `world_max_jobs_per_player` is a 409.
+Other keys are ignored. The catalog is part of the immutable job request and its idempotency fingerprint. Core does not return it in job or status responses or copy it into the model's request context; the private planner-tools subprocess reads it from a bounded sidecar. Cell order is x fastest, then z, then y: index `x + z * width + y * width * length`. Coordinates in plans, lecterns and runs are local to the selection and start at 0. Resubmitting an existing `request_id` with a byte-identical request returns the current job and renews its lease; different data returns HTTP 400. A request that would give one `owner_id` more unfinished jobs than `world_max_jobs_per_player` returns HTTP 409.
 
 ### Job object
 

@@ -101,14 +101,19 @@ def _resolved_state(state):
 
 
 def resolved_state(state):
-    """Resolve omitted vanilla properties as Minecraft does during placement.
+    """Resolve omitted properties as Minecraft does during placement.
 
-    Results are cached per state string (palettes and match lists repeat the
-    same few states); callers get their own property dict to mutate.
+    Vanilla fallback results are cached per state string. Live catalogs are
+    looked up in the current job scope and never enter that global cache.
     """
     if not isinstance(state, str):
         parse_state(state)  # Raises VolumeError; unhashable values must not reach the cache.
-    base, properties = _resolved_state(state)
+    catalog = block_registry.current_catalog()
+    if catalog is None:
+        base, properties = _resolved_state(state)
+    else:
+        base, explicit = parse_state(state)
+        properties = catalog.defaults.get(base, {}) | explicit
     return base, dict(properties)
 
 
@@ -233,6 +238,7 @@ def prepare_plan(dimensions, plan, *, max_operations=MAX_OPERATIONS):
     if not isinstance(operations, list) or not 1 <= len(operations) <= max_operations:
         raise VolumeError(f"Plan must contain 1–{max_operations} operations")
     prepared = []
+    has_live_catalog = block_registry.current_catalog() is not None
     work = 0
     for i, operation in enumerate(operations):
         if not isinstance(operation, dict) or not isinstance(operation.get("op"), str) or operation.get("op") not in OPERATIONS:
@@ -259,7 +265,7 @@ def prepare_plan(dimensions, plan, *, max_operations=MAX_OPERATIONS):
             raise VolumeError(problem)
         for match in operation.get("match", ()):
             base, _ = parse_state(match)
-            if base.startswith("minecraft:"):
+            if base.startswith("minecraft:") or has_live_catalog:
                 validate_state(match)
         prepared.append((operation, a, b))
     return prepared
@@ -273,6 +279,7 @@ def validate_plan(plan, dimensions, max_operations=MAX_OPERATIONS, max_plan_byte
     submission check use it.
     """
     errors = []
+    has_live_catalog = block_registry.current_catalog() is not None
     try:
         if len(json.dumps(plan, ensure_ascii=False, allow_nan=False).encode("utf-8")) > max_plan_bytes:
             raise ValueError("Plan exceeds the plan byte limit")
@@ -287,10 +294,11 @@ def validate_plan(plan, dimensions, max_operations=MAX_OPERATIONS, max_plan_byte
                   for i, state in enumerate(targets)]
         states += [(f"match[{i}]", state, False) for i, state in enumerate(operation.get("match", []))]
         for field, state, placement in states:
-            # Captured modded blocks may be matched, but cannot be invented as targets.
+            # Legacy requests retain syntax-only checks for modded matches; a live
+            # catalog is complete, so every match must resolve against it.
             try:
                 base, _ = parse_state(state)
-                if placement or base.startswith("minecraft:"):
+                if placement or base.startswith("minecraft:") or has_live_catalog:
                     validate_state(state)
             except VolumeError as exc:
                 errors.append({"operation": index + 1, "field": field, "message": str(exc)})

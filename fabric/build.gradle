@@ -1,8 +1,37 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    id 'net.fabricmc.fabric-loom'
+    id 'dev.woflo.mycelium'
 }
 
 repositories { mavenCentral() }
+base.archivesName = 'worldprompt'
+
+sourceSets {
+    main {
+        java.srcDirs('../common/src/main/java', '../pure/src/main/java')
+        resources.srcDir('../common/src/main/resources')
+    }
+    lane {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + compileClasspath + sourceSets.main.runtimeClasspath
+    }
+}
+mycelium {
+    namespace = 'dev.worldprompt.mycelium'
+    minecraft = minecraft_version
+    loader = 'fabric'
+    contracts('command.authorization@1', 'world.replay@1', 'block.catalog@1')
+    bridges {
+        conformance('gametest')
+        conformanceClassesOutOfJar()
+    }
+    pure {
+        sources.from(file('../pure/src/main/java'))
+        release = 25
+        strict = true
+    }
+}
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -19,14 +48,16 @@ processResources {
     inputs.property 'version', project.version
     filesMatching(['fabric.mod.json', 'dev/worldprompt/version.txt']) { expand version: project.version }
 }
-tasks.withType(JavaCompile).configureEach { options.release = 25 }
+tasks.withType(JavaCompile).configureEach { options.release = 25; options.encoding = 'UTF-8' }
 java {
     withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_25
     targetCompatibility = JavaVersion.VERSION_25
 }
-jar {
+tasks.withType(Jar).matching { it.name in ['jar', 'sourcesJar'] }.configureEach {
     from('../LICENSE') { rename { 'LICENSE_worldprompt' } }
+    from(mycelium.root.file('LICENSE')) { rename { 'LICENSE_mycelium' } }
+    from('../mycelium.lock') { into 'META-INF/mycelium' }
 }
 test { useJUnitPlatform() }
 
@@ -39,10 +70,16 @@ fabricApi {
         eula = true
     }
 }
+sourceSets.gametest.java.srcDir('src/gametest-fabric/java')
 
 // The block-registry GameTest compares the live game against Core's bundled schema.
 loom {
+    mods {
+        worldprompt { sourceSet sourceSets.main }
+        'worldprompt-lane' { sourceSet sourceSets.lane }
+    }
     runs {
+        client { source sourceSets.main; runDir 'run/client' }
         configureEach {
             if (name == 'gameTest') property 'worldprompt.schemas', file('../src/worldprompt_core/schemas').absolutePath
         }

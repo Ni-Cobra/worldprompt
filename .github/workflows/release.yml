@@ -1,13 +1,14 @@
 name: Release
 
-# Core and the Fabric mod version independently, so each releases under its own tag:
+# Core and the mod version independently; each loader has its own release tag:
 #   core-v1.0.0    builds the Windows bundle, Linux bundle and wheel
-#   fabric-v1.0.0  builds the mod jar
+#   fabric-v1.0.0  builds the Fabric mod jar
+#   neoforge-v1.0.0 builds the NeoForge mod jar
 # The tag must match the version in the source at the tagged commit. Review the
 # draft release and its notes on GitHub, then publish it.
 on:
   push:
-    tags: ['core-v*', 'fabric-v*']
+    tags: ['core-v*', 'fabric-v*', 'neoforge-v*']
 
 permissions:
   contents: read
@@ -25,8 +26,8 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          if [[ ! "$TAG" =~ ^(core|fabric)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            echo "::error::Tag '$TAG' must look like core-vX.Y.Z or fabric-vX.Y.Z."
+          if [[ ! "$TAG" =~ ^(core|fabric|neoforge)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Tag '$TAG' must look like core-vX.Y.Z , fabric-vX.Y.Z or neoforge-vX.Y.Z."
             exit 1
           fi
           component="${BASH_REMATCH[1]}"
@@ -80,6 +81,9 @@ jobs:
           if [ "$COMPONENT" = core ]; then
             allowed='^(WorldPrompt-Core-VERSION-(linux|windows)-x86_64\.(tar\.gz|zip)|worldprompt_core-VERSION-.*\.whl)$'
             title="WorldPrompt Core $VERSION"
+          elif [ "$COMPONENT" = neoforge ]; then
+            allowed='^worldprompt-neoforge-VERSION\.jar$'
+            title="WorldPrompt NeoForge mod $VERSION"
           else
             allowed='^worldprompt-VERSION\.jar$'
             title="WorldPrompt Fabric mod $VERSION"

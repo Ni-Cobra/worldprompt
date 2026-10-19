@@ -1,0 +1,23 @@
+// Apply inside pluginManagement. Preparation stays an explicit command before Gradle starts.
+if (org.gradle.util.GradleVersion.current() < org.gradle.util.GradleVersion.version('7.5'))
+    throw new GradleException('The Mycelium source hook requires Gradle 7.5 or newer. Choose a Gradle version compatible with your build JVM and loader.')
+def consumer = settings.settingsDir
+while (consumer != null && !new File(consumer, 'mycelium.lock').isFile()) consumer = consumer.parentFile
+if (consumer == null) throw new GradleException('mycelium.lock not found above the settings directory.')
+def java = new File(System.getProperty('java.home'), 'bin/java' + (System.getProperty('os.name').startsWith('Windows') ? '.exe' : ''))
+def inspection = settings.providers.exec {
+    commandLine java, '-jar', 'tools/mycelium/mycelium-wrapper.jar', 'locate', '--root', consumer.toURI().toASCIIString()
+    workingDir consumer
+    ignoreExitValue = true
+}
+// Gradle tracks the process result, including diagnostics, when validating its configuration cache.
+def compiler = new String(inspection.standardOutput.asBytes.get(), 'UTF-8').trim()
+def diagnostics = new String(inspection.standardError.asBytes.get(), 'UTF-8')
+if (diagnostics) System.err.print(diagnostics)
+if (inspection.result.get().exitValue != 0)
+    throw new GradleException('Mycelium source verification failed. Run the Mycelium wrapper before building.')
+gradle.ext.myceliumSelectedSource = new File(compiler).canonicalFile
+settings.pluginManagement { includeBuild(new File(compiler, 'gradle-plugin')) }
+gradle.beforeProject { project ->
+    if (project == project.rootProject) project.apply from: new File(consumer, 'tools/mycelium/consumer.gradle')
+}

@@ -1,0 +1,40 @@
+{
+  "minecraft_version": "test-build-a",
+  "blocks": {
+    "mod:beam": {
+      "properties": {
+        "axis": [
+          "x",
+          "y",
+          "z"
+        ]
+      },
+      "defaults": {
+        "axis": "y"
+      }
+    },
+    "test:color_block": {
+      "properties": {
+        "tone": [
+          "amber",
+          "cyan"
+        ]
+      },
+      "defaults": {
+        "tone": "amber"
+      }
+    },
+    "test:painted_beam": {
+      "properties": {
+        "axis": [
+          "x",
+          "y",
+          "z"
+        ]
+      },
+      "defaults": {
+        "axis": "y"
+      }
+    }
+  }
+}

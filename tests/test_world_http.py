@@ -1,6 +1,7 @@
 """Loopback WorldPrompt HTTP protocol with real worker subprocesses."""
 import http.client
 import json
+from pathlib import Path
 import threading
 import uuid
 
@@ -120,6 +121,22 @@ def test_submit_poll_complete_result_reconstruct_and_finish(world_http):
                                {"status": "completed", "operation": 2})
     assert status == 200 and completed["status"] == "completed"
     assert [entry["id"] for entry in request("GET", "/api/world/jobs")[1]["jobs"]] == [concurrent["id"]]
+
+
+def test_live_catalog_crosses_http_only_as_private_idempotent_job_input(world_http):
+    supervisor, request_http, _ = world_http
+    body = submission()
+    body["block_catalog"] = json.loads((Path(__file__).parent / "fixtures" / "block_catalog.json").read_text(encoding="utf-8"))
+    status, job = request_http("POST", "/api/world/jobs", body)
+    assert status == 202 and "block_catalog" not in job
+    stored = json.loads((supervisor.directory / job["id"] / "request.json").read_text())
+    assert stored["block_catalog"] == body["block_catalog"]
+    assert request_http("POST", "/api/world/jobs", json.loads(json.dumps(body)))[1]["id"] == job["id"]
+    changed = json.loads(json.dumps(body))
+    changed["block_catalog"]["minecraft_version"] = "different"
+    status, error = request_http("POST", "/api/world/jobs", changed)
+    assert status == 400 and "different submission data" in error["error"]
+    assert "block_catalog" not in supervisor.get_job(job["id"])
 
 
 def test_per_player_limit_is_a_409_with_a_stable_code(world_http):
@@ -323,7 +340,7 @@ def test_result_stays_available_after_completion(world_http):
 
 def test_mod_uses_the_same_version_headers():
     from pathlib import Path
-    versions = (Path(__file__).resolve().parents[1] / "fabric/src/main/java/dev/worldprompt/Versions.java").read_text(encoding="utf-8")
+    versions = (Path(__file__).resolve().parents[1] / "pure/src/main/java/dev/worldprompt/kernel/Versions.java").read_text(encoding="utf-8")
     assert f'CORE_HEADER = "{VERSION_HEADER}"' in versions
     assert f'MOD_HEADER = "{MOD_VERSION_HEADER}"' in versions
     assert 'MISMATCH = "version_mismatch"' in versions

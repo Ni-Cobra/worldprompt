@@ -15,7 +15,8 @@ The mod creates `config/worldprompt.json` on first launch and finds Core automat
 
 ## Compatibility
 
-Use Core 1.0.0 with mod 1.0.0. Core and the mod share a MAJOR.MINOR version; if they differ, update both. Only Fabric is supported.
+Use Core 1.0.0 with mod 1.0.0. Core and the mod share a MAJOR.MINOR version; if they differ, update both.
+This jar is the Fabric artifact. The same shared implementation also builds for [NeoForge](../neoforge/README.md).
 
 ## Documentation
 

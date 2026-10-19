@@ -1,0 +1,41 @@
+// Completion policy and provenance use the same verifier that selected the included build.
+def consumer = project.rootDir
+while (consumer != null && !new File(consumer, 'mycelium.lock').isFile()) consumer = consumer.parentFile
+if (consumer == null) throw new GradleException('mycelium.lock not found.')
+def sourceConsumer = consumer
+def selected = gradle.ext.myceliumSelectedSource
+def java = new File(System.getProperty('java.home'), 'bin/java' + (System.getProperty('os.name').startsWith('Windows') ? '.exe' : ''))
+def report = layout.buildDirectory.file('mycelium-source/source.json')
+def sourceCheck = tasks.register('myceliumSourceCheck', Exec) {
+    group = 'verification'
+    description = 'Verifies the selected compiler source against the consumer completion policy.'
+    workingDir sourceConsumer
+    commandLine java, '-jar', 'tools/mycelium/mycelium-wrapper.jar', 'check', '--root', sourceConsumer.toURI().toASCIIString(),
+        '--report', report.get().asFile.toURI().toASCIIString()
+    // Always inspect source contents; a previous successful marker cannot authorize a changed checkout.
+    doFirst { report.get().asFile.delete() }
+}
+allprojects {
+    def consumerProject = it
+    pluginManager.withPlugin('dev.woflo.mycelium') {
+        def compiler = consumerProject.extensions.getByName('mycelium')
+        compiler.root.convention(consumerProject.layout.dir(consumerProject.provider { selected }))
+        gradle.projectsEvaluated {
+            def actual = compiler.root.get().asFile.canonicalFile
+            if (actual != selected)
+                throw new GradleException("${consumerProject.path}: mycelium.root selects ${actual}, but the verified compiler is ${selected}.")
+            compiler.root.finalizeValue()
+        }
+    }
+    tasks.matching { it.name == 'check' }.configureEach { dependsOn sourceCheck }
+    afterEvaluate {
+        def compiler = consumerProject.extensions.findByName('mycelium')
+        def archives = compiler == null ? [] : compiler.artifactJars.get()
+        consumerProject.tasks.withType(Jar).configureEach {
+            if (name == 'sourcesJar' || (archives.isEmpty() ? name == 'jar' : archives.contains('*') || archives.contains(name))) {
+                dependsOn sourceCheck
+                from(report) { into 'META-INF/mycelium'; rename { 'source.json' } }
+            }
+        }
+    }
+}

@@ -1,7 +1,7 @@
 """Bounded CLI planning with saved Codex or Claude subscription sign-in.
 
 The local engine validates each returned plan against the captured block volume.
-The planner receives only offline registry and validation tools, never access to Minecraft.
+The planner receives bounded tools backed by a per-job catalog snapshot, never direct access to Minecraft.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from . import cli_process
 from .agent_types import AgentConfig, AgentError, AgentResult, is_reasoning_effort, validate_model_settings  # noqa: F401 (re-exported)
 from .cli_discovery import resolve_command
 from .core import validate_plan
+from .block_registry import current_catalog, write_catalog_file
 from .limits import (MAX_INSPECT_BLOCKS, MAX_OPERATIONS, MAX_PREVIEW_IMAGE_BYTES, MAX_PREVIEW_IMAGES, MAX_PREVIEWS,
                      MAX_SURFACE_COLUMNS, MAX_TOOL_CALLS, number_word)
 from .spatial_tools import write_snapshot
@@ -329,9 +330,21 @@ def generate_plan(summary: dict[str, Any], prompt: str, job_dir: Path, config: A
     except FileExistsError as exc:
         raise AgentError("Use a new unique job directory for each planning request") from exc
     (job_dir / "schema.json").write_text(json.dumps(plan_schema(config.max_operations)), encoding="utf-8")
-    instructions = INSTRUCTIONS + (LECTERN_INSTRUCTIONS if lecterns else "") + {"normal": "", "draft": HIGH_INSTRUCTIONS, "review": REVIEW_INSTRUCTIONS}[phase]
+    catalog = current_catalog()
+    if catalog is None:
+        registry_instructions = ""
+    else:
+        registry_instructions = (f"For this job, the live Minecraft {catalog.minecraft_version} server catalog is "
+                                 "authoritative and replaces the bundled vanilla registry described in the generic "
+                                 "instructions. You may use its registered modded blocks; choose IDs and property "
+                                 "values returned by list_blocks/get_block.\n")
+    instructions = (INSTRUCTIONS + registry_instructions
+                    + (LECTERN_INSTRUCTIONS if lecterns else "")
+                    + {"normal": "", "draft": HIGH_INSTRUCTIONS, "review": REVIEW_INSTRUCTIONS}[phase])
     (job_dir / "instructions.md").write_text(instructions, encoding="utf-8")
     (job_dir / "request.json").write_text(request, encoding="utf-8")
+    if catalog is not None:
+        write_catalog_file(catalog, job_dir / "block-catalog.json")
     if source_volume is not None:
         if tuple(source_volume.dimensions) != tuple(dims):
             raise AgentError("Source snapshot dimensions must match the planning request")

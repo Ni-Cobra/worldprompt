@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   workflow_call:
     inputs:
-      # 'core' or 'fabric' builds only that component (releases use this);
+      # 'core', 'fabric' or 'neoforge' builds only that component (releases use this);
       # empty or 'all' builds both, as for pushes and pull requests.
       components:
         type: string
@@ -51,12 +51,13 @@ jobs:
             dist/worldprompt_core-*.whl
           if-no-files-found: error
 
-  fabric:
-    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'fabric' }}
+  mod:
+    if: ${{ !inputs.components || inputs.components != 'core' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        loader: ${{ fromJSON(inputs.components == 'fabric' && '["fabric"]' || inputs.components == 'neoforge' && '["neoforge"]' || '["fabric","neoforge"]') }}
     runs-on: ubuntu-22.04
-    defaults:
-      run:
-        working-directory: fabric
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -64,13 +65,18 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: gradle
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare the pinned Mycelium compiler
+        run: ./mycelium prepare
       - name: Build mod, JUnit tests and isolated Minecraft GameTests
-        run: ./gradlew build
+        run: ./gradlew :${{ matrix.loader }}:build --max-workers=2
       - name: Read mod version
         id: mod_version
-        run: echo "value=$(sed -n 's/^version=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
+        run: echo "value=$(sed -n 's/^version=//p' fabric/gradle.properties)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: worldprompt-fabric
-          path: fabric/build/libs/worldprompt-${{ steps.mod_version.outputs.value }}.jar
+          name: worldprompt-${{ matrix.loader }}
+          path: ${{ matrix.loader }}/build/libs/worldprompt${{ matrix.loader == 'neoforge' && '-neoforge' || '' }}-${{ steps.mod_version.outputs.value }}.jar
           if-no-files-found: error

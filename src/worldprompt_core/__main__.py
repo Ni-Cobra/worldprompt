@@ -60,10 +60,11 @@ def main(argv=None):
     serve.add_argument("--port", type=int, help="Override settings GUI port for this launch")
     tools = sub.add_parser("planner-tools", help="Private stdio planner validation tools")
     tools.add_argument("--request", required=True)
+    tools.add_argument("--catalog", help="Private validated block-catalog sidecar for this job")
     args = parser.parse_args(argv)
     if args.command == "planner-tools":
         from .planner_tools import serve as serve_tools
-        return serve_tools(args.request)
+        return serve_tools(args.request, catalog_path=args.catalog)
     try:
         from .server import serve as launch
         config = load_config(args.config)

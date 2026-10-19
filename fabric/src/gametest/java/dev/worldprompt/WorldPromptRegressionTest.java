@@ -1,5 +1,8 @@
 package dev.worldprompt;
 
+import dev.worldprompt.kernel.PromptRequest;
+import dev.worldprompt.kernel.RegionBounds;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import java.nio.ByteBuffer;

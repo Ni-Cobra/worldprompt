@@ -1,0 +1,6 @@
+*.jar -text
+# Git patches contain significant context spaces and path-separator tabs.
+patches/*.patch -text -whitespace
+*.gradle text eol=lf
+*.md text eol=lf
+*.sha256 text eol=lf

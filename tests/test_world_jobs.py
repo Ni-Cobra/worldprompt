@@ -250,6 +250,39 @@ def test_idempotent_retry_does_not_duplicate_worker_or_allow_changed_owner(super
         supervisor.submit(changed_owner)
 
 
+def test_live_catalog_is_frozen_in_private_request_and_part_of_idempotency(tmp_path):
+    supervisor = JobSupervisor({"jobs_dir": str(tmp_path / "jobs")}, start=False)
+    try:
+        request = submission(block_catalog={"minecraft_version": "test-build", "blocks": {
+            "test:color_block": {"properties": {"tone": ["amber", "cyan"]}, "defaults": {"tone": "amber"}}}})
+        job = supervisor.submit(request)
+        job_directory = tmp_path / "jobs" / "world" / job["id"]
+        saved = json.loads((job_directory / "request.json").read_text())
+        assert saved["block_catalog"]["minecraft_version"] == "test-build"
+        assert "block_catalog" not in job and "block_catalog" not in supervisor.get_job(job["id"])
+        assert supervisor.submit(copy.deepcopy(request))["id"] == job["id"]
+
+        changed = copy.deepcopy(request)
+        changed["block_catalog"]["minecraft_version"] = "other-build"
+        with pytest.raises(ValueError, match="different submission data"):
+            supervisor.submit(changed)
+    finally:
+        supervisor.close()
+
+
+def test_invalid_live_catalog_is_rejected_before_a_job_is_persisted(tmp_path):
+    supervisor = JobSupervisor({"jobs_dir": str(tmp_path / "jobs")}, start=False)
+    try:
+        request = submission(block_catalog={"minecraft_version": "test-build", "blocks": {
+            "test:color_block": {"properties": {"tone": ["amber", "cyan"]}, "defaults": {}}}})
+        with pytest.raises(ValueError, match="same names"):
+            supervisor.submit(request)
+        assert supervisor.jobs == {}
+        assert not list((tmp_path / "jobs" / "world").glob("*/request.json"))
+    finally:
+        supervisor.close()
+
+
 def test_application_requires_ready_and_monotonic_complete_progress(supervisor_factory):
     supervisor = supervisor_factory()
     job = supervisor.submit(submission(prompt="blocked"))

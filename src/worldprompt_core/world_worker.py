@@ -14,6 +14,7 @@ from .core import BlockVolume
 from .limits import MAX_AXIS, MAX_BLOCKS, MAX_CAPTURE_PALETTE, MAX_MESSAGE_CHARS
 from .pipeline import agent_config_for
 from .agent import AgentConfig, generate_plan
+from .block_registry import catalog_from_wire, using_catalog
 
 
 def snapshot_volume(source: dict) -> BlockVolume:
@@ -74,6 +75,7 @@ def run_worker(config: dict, request_path, connection):
         request_path = Path(request_path)
         request = json.loads(request_path.read_text(encoding="utf-8"))
         directory = request_path.parent
+        catalog = catalog_from_wire(request["block_catalog"]) if "block_catalog" in request else None
         source = snapshot_volume(request["source"])
         extra_context = {"viewpoint_context": request["viewpoint_context"]} if request.get("viewpoint_context") is not None else {}
         if request.get("lecterns"):
@@ -83,12 +85,13 @@ def run_worker(config: dict, request_path, connection):
             connection.send({"kind": "process", "pid": pid})
         def process_finished(pid):
             connection.send({"kind": "process_finished", "pid": pid})
-        result = plan_volume(source, request["prompt"], directory / "planning",
-                             directory / "previews", planner,
-                             effort=request["effort"], progress=progress, replay_dir=directory / "replay",
-                             planner=partial(generate_plan, source_volume=source,
-                                             process_started=process_started, process_finished=process_finished),
-                             **extra_context)
+        with using_catalog(catalog):
+            result = plan_volume(source, request["prompt"], directory / "planning",
+                                 directory / "previews", planner,
+                                 effort=request["effort"], progress=progress, replay_dir=directory / "replay",
+                                 planner=partial(generate_plan, source_volume=source,
+                                                 process_started=process_started, process_finished=process_finished),
+                                 **extra_context)
         (directory / "report.json").write_text(json.dumps(result.report), encoding="utf-8")
         connection.send({"kind": "ready", "manifest": result.manifest})
     except Exception as exc:

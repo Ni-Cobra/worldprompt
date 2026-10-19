@@ -1,0 +1,26 @@
+modLoader="javafml"
+loaderVersion="[12,)"
+license="MIT AND MPL-2.0"
+issueTrackerURL="https://github.com/Ni-Cobra/worldprompt/issues"
+
+[[mods]]
+modId="worldprompt"
+version="${version}"
+displayName="WorldPrompt"
+iconFile="assets/worldprompt/icon.png"
+displayURL="https://github.com/Ni-Cobra/worldprompt"
+description='''Select and prompt bounded Minecraft regions using WorldPrompt Core and your Codex or Claude CLI.'''
+
+[[dependencies.worldprompt]]
+modId="neoforge"
+type="required"
+versionRange="[26.3.0.92,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.worldprompt]]
+modId="minecraft"
+type="required"
+versionRange="[26.3]"
+ordering="NONE"
+side="BOTH"

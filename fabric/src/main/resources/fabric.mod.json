@@ -4,7 +4,7 @@
   "version": "${version}",
   "name": "WorldPrompt",
   "description": "Select and prompt bounded Minecraft regions using WorldPrompt Core and your Codex or Claude CLI.",
-  "license": "MIT",
+  "license": "MIT AND MPL-2.0",
   "contact": {
     "homepage": "https://github.com/Ni-Cobra/worldprompt",
     "sources": "https://github.com/Ni-Cobra/worldprompt",
@@ -12,7 +12,7 @@
   },
   "icon": "assets/worldprompt/icon.png",
   "environment": "*",
-  "entrypoints": { "main": ["dev.worldprompt.WorldPrompt"] },
+  "entrypoints": { "main": ["dev.worldprompt.WorldPromptFabric"] },
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "26.3",

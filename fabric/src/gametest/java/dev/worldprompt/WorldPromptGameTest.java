@@ -1,5 +1,7 @@
 package dev.worldprompt;
 
+import dev.worldprompt.kernel.RegionBounds;
+
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

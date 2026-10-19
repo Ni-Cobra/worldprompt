@@ -17,6 +17,7 @@ import time
 import uuid
 
 from .config import default_config, job_limits, write_private_json
+from .block_registry import catalog_from_wire
 from .world_worker import run_worker, snapshot_volume
 from .context import normalize_viewpoint
 from .lecterns import validate_lecterns
@@ -199,8 +200,11 @@ class JobSupervisor:
     def submit(self, body):
         if not isinstance(body, dict):
             raise ValueError("Expected a job object.")
-        allowed = {"request_id", "owner_id", "owner_name", "prompt", "effort", "source", "viewpoint", "lecterns"}
+        allowed = {"request_id", "owner_id", "owner_name", "prompt", "effort", "source", "viewpoint", "lecterns",
+                   "block_catalog"}
         request = copy.deepcopy({key: value for key, value in body.items() if key in allowed})
+        if "block_catalog" in request:
+            request["block_catalog"] = catalog_from_wire(request["block_catalog"]).to_wire()
         request["adapter"] = "world"
         if request.get("viewpoint") is not None:
             request["viewpoint_context"] = normalize_viewpoint(request["viewpoint"])

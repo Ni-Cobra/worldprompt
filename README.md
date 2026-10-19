@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>It's like WorldEdit... but AI</b><br>
-  A Fabric mod for Minecraft 26.3 that builds with your own ChatGPT (Codex) or Claude subscription.<br>
+  A Minecraft 26.3 mod for Fabric and NeoForge that builds with your ChatGPT (Codex) or Claude subscription.<br>
   Works in single-player and on multiplayer servers. Players don't need to install anything.
 </p>
 
@@ -49,6 +49,11 @@ numbers can differ between the two. Older versions are on the
 
 No API key needed: WorldPrompt runs on the subscription you already have, and your
 credentials stay with the CLI.
+
+The 1.0.0 download above is for Fabric. The NeoForge jar can be built from this checkout
+for Minecraft 26.3. Install the artifact for your loader; NeoForge does not need Fabric
+Loader or Fabric API. Mycelium is used during development and is not an additional mod to
+install. See [developing with Mycelium](docs/mycelium.md).
 
 ## 🚀 Setup
 
@@ -179,17 +184,18 @@ Full command reference and server settings: [docs/minecraft.md](docs/minecraft.m
 
 ```
 browser settings page ──http 127.0.0.1:8765──▶ WorldPrompt Core (Python)
-Fabric mod ──http 127.0.0.1:8768 + adapter token──▶ Core job supervisor
+Minecraft mod ──http 127.0.0.1:8768 + adapter token──▶ Core job supervisor
                                                      └▶ worker process per job
                                                          └▶ Codex CLI | Claude CLI
                                                          └▶ validate → replay
-Fabric mod ◀── downloads the validated replay and places it over server ticks
+Minecraft mod ◀── downloads the validated replay and places it over server ticks
 ```
 
 - **Core** (`src/worldprompt_core/`) never touches the world. It receives the
   captured selection, plans through the selected CLI, validates the plan against the
-  bundled Minecraft 26.3 block registry and compiles an ordered replay.
-- **The mod** (`fabric/`) never talks to a model. It captures the selection,
+  server's live block catalog, and compiles an ordered replay. For requests without a
+  live catalog, Core uses the bundled vanilla catalog.
+- **The mod** (`common/`, `pure/`, `fabric/`, `neoforge/`) never talks to a model. It captures the selection,
   re-validates block states against the live game registry, places the replay, and
   keeps the undo snapshot and the plan for `/wp rebuild`.
 - Everything binds to loopback only. The settings page uses a per-launch token and
@@ -204,6 +210,7 @@ Fabric mod ◀── downloads the validated replay and places it over server ti
 | Providers, planning passes, plan operations, planner tools, limits, block registry | [docs/planner.md](docs/planner.md) |
 | Headless/VPS install with SSH and systemd | [docs/vps.md](docs/vps.md) |
 | Building, testing, CI and releases | [docs/development.md](docs/development.md) |
+| Shared development, loader boundaries and Mycelium | [docs/mycelium.md](docs/mycelium.md) |
 | The mod's install notes and compatibility | [fabric/README.md](fabric/README.md) |
 
 ### Build from source
@@ -216,7 +223,8 @@ python -m venv .venv && source .venv/bin/activate   # Windows PowerShell: .venv\
 python -m pip install -e '.[test,build]'
 worldprompt-core                                     # or: worldprompt-core serve --no-browser
 python -m pytest -q                                  # Core tests (never call a real AI account)
-cd fabric && ./gradlew build                         # mod tests and jar
+./mycelium prepare                 # pinned build-time compiler
+./gradlew build                                      # both mod jars, JUnit and GameTests
 ```
 
 Running headless, building the Windows and Linux bundles, CI and releases are covered in
@@ -236,8 +244,8 @@ code, resources or packaging changed gets a patch bump, or both components get t
 minor version if the Core ↔ mod API changed. A component the branch didn't touch keeps
 its version. Changes to docs, the README, CI or agent guidance alone bump nothing.
 
-Releases are cut from `master` by pushing a `core-vX.Y.Z` or `fabric-vX.Y.Z` tag; CI builds
-and verifies that component and drafts the GitHub release (see
+Releases are cut from `master` by pushing a `core-vX.Y.Z`, `fabric-vX.Y.Z` or
+`neoforge-vX.Y.Z` tag. CI builds and verifies that component and drafts the GitHub release (see
 [docs/development.md](docs/development.md)). Each bump updates every place the version
 lives, including the download links and `Current versions:` line in this README, and
 `tests/test_version_sync.py` checks that they agree. The full agent workflow is in

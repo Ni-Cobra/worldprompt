@@ -4,7 +4,7 @@ from pathlib import Path
 
 from worldprompt_core import limits
 
-CORE_LIMITS = Path(__file__).resolve().parents[1] / "fabric/src/main/java/dev/worldprompt/CoreLimits.java"
+CORE_LIMITS = Path(__file__).resolve().parents[1] / "pure/src/main/java/dev/worldprompt/kernel/CoreLimits.java"
 
 
 def mirrored_constants():

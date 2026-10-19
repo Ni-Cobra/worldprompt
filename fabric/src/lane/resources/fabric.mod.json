@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "worldprompt-lane",
+  "version": "1.0.0",
+  "name": "WorldPrompt runtime lane hook",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.worldprompt.lane.WorldPromptLane"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "fabric-api": ">=0.161.0+26.3"
+  }
+}

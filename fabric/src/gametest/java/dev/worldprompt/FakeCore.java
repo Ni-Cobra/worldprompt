@@ -1,5 +1,7 @@
 package dev.worldprompt;
 
+import dev.worldprompt.kernel.Versions;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -83,6 +85,7 @@ final class FakeCore implements AutoCloseable {
     private JsonObject publicJob(String id) {
         JsonObject request = requests.get(id);
         JsonObject body = request.deepCopy();
+        body.remove("block_catalog");
         body.addProperty("id", id);
         body.addProperty("status", states.get(id));
         body.addProperty("model", model);
