@@ -7,7 +7,7 @@ How to run WorldPrompt from source, test it, build the release artifacts and cut
 | For | You need |
 |---|---|
 | Core | Python 3.11 or newer (CI and the packaged builds use 3.12). On Debian/Ubuntu install `python3-venv` |
-| The mod | Java 25, Git and Python 3.11 or newer. Bootstrap Mycelium before building. NeoForge uses Python to adapt GameTests. The Gradle wrapper downloads Gradle and Minecraft dependencies on first use. |
+| The mod | Java 25, Git and Python 3.11 or newer. Bootstrap Mycelium before building. NeoForge uses Python to adapt GameTests: `$PYTHON` if set, else `python3` or `python` from `PATH`. The Gradle wrapper downloads Gradle and Minecraft dependencies on first use. |
 | Running a real plan | The Codex CLI or Claude CLI, signed in. Tests and the packaged smoke test never need one |
 
 ## Run Core from source

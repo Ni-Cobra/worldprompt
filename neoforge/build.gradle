@@ -14,13 +14,23 @@ java {
     withSourcesJar()
 }
 repositories { mavenCentral() }
+// $PYTHON wins; otherwise the first of python3/python on PATH. Windows prefers python, since its
+// python3.exe is often the Microsoft Store stub.
+def windows = System.getProperty('os.name').startsWith('Windows')
+def pythonNames = windows ? ['python.exe', 'python3.exe'] : ['python3', 'python']
+def pythonCommand = System.getenv('PYTHON') ?: pythonNames.findResult { name ->
+    (System.getenv('PATH') ?: '').split(File.pathSeparator).findResult { dir ->
+        def candidate = new File(dir, name)
+        candidate.isFile() && candidate.canExecute() ? candidate.absolutePath : null
+    }
+} ?: pythonNames[0]
 def generatedGameTests = layout.buildDirectory.dir('generated/sources/gametest/java')
 def generateGameTests = tasks.register('generateGameTests', Exec) {
     inputs.dir('../fabric/src/gametest/java')
     inputs.file('../tools/generate_gametests.py')
     inputs.file('../fabric/src/gametest/resources/data/worldprompt-test/test_environment/catalog.json')
     outputs.dir(generatedGameTests)
-    commandLine(System.getenv('PYTHON') ?: 'python', '../tools/generate_gametests.py',
+    commandLine(pythonCommand, '../tools/generate_gametests.py',
             '--source-root', '../fabric/src/gametest/java',
             '--output-dir', generatedGameTests.get().asFile.absolutePath)
 }
