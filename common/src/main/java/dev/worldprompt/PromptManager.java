@@ -1,12 +1,11 @@
 package dev.worldprompt;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import dev.worldprompt.kernel.CoreLimits;
 import dev.worldprompt.kernel.PromptRequest;
 import dev.worldprompt.kernel.RegionBounds;
 import dev.worldprompt.kernel.Versions;
-
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
@@ -59,13 +58,18 @@ final class PromptManager implements AutoCloseable {
     private long ticks;
 
     PromptManager(MinecraftServer server, AdapterConfig config) {
-        // Validate the native snapshot before opening the HTTP client's resources.
-        Map<String, Object> blockCatalog = BlockCatalogTransport.capture();
+        // Capture the native snapshot before opening the HTTP client's resources. Entries Core's
+        // protocol cannot carry are left out and logged here, once per server host.
+        BlockCatalogTransport.Capture catalog = BlockCatalogTransport.capture();
+        String excluded = catalog.exclusionWarning();
+        if (excluded != null) LOG.warn(excluded);
+        String unusable = catalog.unusableError();
+        if (unusable != null) LOG.error(unusable);
         this.server = server; this.config = config; client = new CoreClient(config);
         edits = new EditHistory(config); active = edits.active; cleanup = edits.cleanup;
         feedback = new Feedback(server, config, edits);
         placer = new ReplayPlacer(server, config, edits, feedback);
-        driver = new CoreJobDriver(server, config, client, edits, placer, feedback, blockCatalog);
+        driver = new CoreJobDriver(server, config, client, edits, placer, feedback, catalog.transport());
     }
     void corner(ServerPlayer player, boolean first, BlockPos pos) {
         Selection old = selections.get(player.getUUID());

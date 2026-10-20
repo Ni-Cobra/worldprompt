@@ -4,7 +4,7 @@ plugins {
 }
 
 repositories { mavenCentral() }
-base.archivesName = 'worldprompt'
+base.archivesName = 'worldprompt-fabric'
 
 sourceSets {
     main {
@@ -20,7 +20,7 @@ mycelium {
     namespace = 'dev.worldprompt.mycelium'
     minecraft = minecraft_version
     loader = 'fabric'
-    contracts('command.authorization@1', 'world.replay@1', 'block.catalog@1')
+    contracts('command.authorization@1', 'world.replay@1', 'block.catalog@2')
     bridges {
         conformance('gametest')
         conformanceClassesOutOfJar()

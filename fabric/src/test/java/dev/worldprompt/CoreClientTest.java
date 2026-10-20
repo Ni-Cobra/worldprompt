@@ -1,8 +1,7 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.Versions;
-
 import static org.junit.jupiter.api.Assertions.*;
+import dev.worldprompt.kernel.Versions;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;

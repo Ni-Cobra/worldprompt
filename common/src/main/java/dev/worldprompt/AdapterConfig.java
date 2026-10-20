@@ -1,9 +1,8 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.CoreLimits;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import dev.worldprompt.kernel.CoreLimits;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;

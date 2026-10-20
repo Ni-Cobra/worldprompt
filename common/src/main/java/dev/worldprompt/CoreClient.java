@@ -1,10 +1,9 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.Versions;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.worldprompt.kernel.Versions;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;

@@ -1,7 +1,6 @@
 package dev.worldprompt;
 
 import dev.worldprompt.kernel.RegionBounds;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;

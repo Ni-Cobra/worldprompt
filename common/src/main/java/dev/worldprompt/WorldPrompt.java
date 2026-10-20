@@ -1,14 +1,12 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.CommandPolicy;
-
-import net.minecraft.commands.Commands;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.permissions.Permissions;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import dev.worldprompt.kernel.CommandPolicy;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.server.permissions.Permissions;
 import org.slf4j.LoggerFactory;
 
 /** Shared command tree and server-scoped feature host. Loader entrypoints bind native events. */

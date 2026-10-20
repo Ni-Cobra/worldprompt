@@ -1,10 +1,11 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.RegionBounds;
-
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import dev.worldprompt.kernel.RegionBounds;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -46,8 +47,29 @@ final class CoreJobDriver {
                   ReplayPlacer placer, Feedback feedback, Map<String, Object> blockCatalog) {
         this.server = server; this.config = config; this.client = client;
         this.edits = edits; this.placer = placer; this.feedback = feedback;
-        // Registry contents are frozen before this server host starts. Keep the same immutable snapshot for retries.
+        // Registry contents are frozen before this server host starts. Keep the same immutable snapshot for
+        // retries, so a resubmitted job ID sends byte-identical data. Null when this server has none to send.
         this.blockCatalog = blockCatalog;
+    }
+
+    /**
+     * The job request. {@code block_catalog} is optional in the protocol: when this server has no
+     * catalog Core can carry, the key is left out and Core uses its bundled vanilla registry, rather
+     * than being sent a partial snapshot presented as this server's own.
+     */
+    private Map<String, Object> submission(Job job) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("request_id", job.id);
+        request.put("owner_id", job.owner.toString());
+        request.put("owner_name", job.ownerName);
+        request.put("prompt", job.prompt.prompt());
+        request.put("effort", job.prompt.effort());
+        request.put("source", job.snapshot.transport());
+        // Both remaining fields are optional in the protocol; send neither as a JSON null.
+        if (job.viewpoint != null) request.put("viewpoint", job.viewpoint);
+        request.put("lecterns", job.snapshot.lecterns.transport());
+        if (blockCatalog != null) request.put("block_catalog", blockCatalog);
+        return Collections.unmodifiableMap(request);
     }
 
     /** One tick of one job. {@code ticks} is the manager's tick counter, passed through to the placer. */
@@ -66,11 +88,7 @@ final class CoreJobDriver {
             case SUBMIT -> {
                 if (job.pending == null && now >= job.retryAt) {
                     job.submitted = true;
-                    job.pending = client.requestLazy("POST", "/api/world/jobs", () -> Map.of("request_id", job.id,
-                            "owner_id", job.owner.toString(), "owner_name", job.ownerName,
-                            "prompt", job.prompt.prompt(), "effort", job.prompt.effort(), "source", job.snapshot.transport(),
-                            "viewpoint", job.viewpoint, "lecterns", job.snapshot.lecterns.transport(),
-                            "block_catalog", blockCatalog));
+                    job.pending = client.requestLazy("POST", "/api/world/jobs", () -> submission(job));
                 }
                 if (finished(job.pending)) {
                     try { acceptRemote(job, take(job)); job.mode = Job.Mode.WAIT; }

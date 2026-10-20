@@ -1,8 +1,7 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.RegionBounds;
-
 import com.google.gson.JsonObject;
+import dev.worldprompt.kernel.RegionBounds;
 
 /** Geometric center of the authentic operation, including no-op replacements. */
 final class OperationCenter {

@@ -1,9 +1,7 @@
 {
   "schema": 2,
   "repository": "https://github.com/worflor/mycelium.git",
-  "revision": "f0cbf480906b722e40eed6cac3189fa624760176",
-  "patch": "tools/mycelium/patches/c70063f659ea72aa1572bdb23510d1d157cb26951c8c8a151cefca2a27ddebb4.patch",
-  "patch_sha256": "c70063f659ea72aa1572bdb23510d1d157cb26951c8c8a151cefca2a27ddebb4",
-  "effective_tree": "9a99b52e93b8e42570b8d5a6b8fef6d50ca5054c",
+  "revision": "6abbf857af90de8fa7753c89316c3c4746ed0af8",
+  "effective_tree": "e35b1153049a41879f12758849981ee693b3d6f8",
   "completion": "locked"
 }

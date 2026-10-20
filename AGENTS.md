@@ -111,6 +111,13 @@ Details are in the docs above; these are the rules that are easy to break.
 
 The policy is in [`README.md#versioning`](README.md#versioning). In short, for agents:
 
+- **Fabric and NeoForge are one component, "the mod".** They read their version from the
+  same `fabric/gradle.properties`, so they always carry the same version and are released
+  together from the same commit (a matching `fabric-vX.Y.Z` / `neoforge-vX.Y.Z` pair).
+  Never bump or release one loader alone, and never give them separate version strings. The release
+  workflow rejects a loader tag that contradicts its sibling, but it cannot require a sibling that is
+  not pushed yet, so pushing both is on you.
+  Their jars are `worldprompt-fabric-<version>.jar` and `worldprompt-neoforge-<version>.jar`.
 - **Do not bump versions while working.** Normal changes, fixes and follow-ups leave every
   version string alone.
 - **Bump once per branch, only when the user says the branch is ready to merge into
@@ -124,7 +131,8 @@ The policy is in [`README.md#versioning`](README.md#versioning). In short, for a
   - major only when the user says so.
   Changes limited to docs, README, CI or agent guidance don't bump anything. An untouched
   component keeps its version even if the other's patch moves ahead.
-- Keep these version locations in sync. `tests/test_version_sync.py` checks the Core and Fabric locations:
+- Keep these version locations in sync. `tests/test_version_sync.py` checks the Core locations, the
+  mod's, both loader READMEs, both loader jar names and the lane's Core version:
   - Core: `pyproject.toml`, `src/worldprompt_core/__init__.py`, and the footer version in
     `src/worldprompt_core/static/index.html`.
   - Mod: `fabric/gradle.properties`.
@@ -132,6 +140,7 @@ The policy is in [`README.md#versioning`](README.md#versioning). In short, for a
   - `fabric/README.md`: the `WorldPrompt X.Y.Z targets Minecraft` line, jar names and
     the `Use Core X.Y.Z with mod X.Y.Z` sentence.
   - `neoforge/README.md`: Minecraft and NeoForge versions, jar names and the Core version.
+  - `tools/lane/lane.py`: `CORE_VERSION`, which the mod's compatibility check compares against.
   Then search the repository for the old version string to catch anything else.
 - Releases are made from `master` by pushing `core-vX.Y.Z` / `fabric-vX.Y.Z` / `neoforge-vX.Y.Z` tags. Only push
   tags when the user asks.

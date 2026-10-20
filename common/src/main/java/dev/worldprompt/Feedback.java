@@ -1,7 +1,6 @@
 package dev.worldprompt;
 
 import dev.worldprompt.kernel.RegionBounds;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;

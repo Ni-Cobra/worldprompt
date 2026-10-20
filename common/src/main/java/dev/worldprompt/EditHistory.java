@@ -1,7 +1,6 @@
 package dev.worldprompt;
 
 import dev.worldprompt.kernel.RegionBounds;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;

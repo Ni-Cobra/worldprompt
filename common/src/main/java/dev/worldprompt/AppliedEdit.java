@@ -1,7 +1,6 @@
 package dev.worldprompt;
 
 import dev.worldprompt.kernel.PromptRequest;
-
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.world.level.block.state.BlockState;

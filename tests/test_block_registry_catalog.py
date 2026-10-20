@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 
 from worldprompt_core import limits
-from worldprompt_core.block_registry import (catalog_from_wire, current_catalog, list_blocks, using_catalog,
-                                             write_catalog_file)
+from worldprompt_core.block_registry import (catalog_from_wire, current_catalog,
+                                             get_block, list_blocks, using_catalog, write_catalog_file)
 from worldprompt_core.core import BlockVolume, VolumeError, apply_plan, prepare_plan, resolved_state, validate_plan
 from worldprompt_core.planner_tools import server_command
 from worldprompt_core.spatial_tools import write_snapshot
@@ -168,8 +168,12 @@ def test_mcp_subprocess_uses_private_live_catalog_for_all_registry_tools(tmp_pat
         {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call', 'params': {'name': 'get_block', 'arguments': {'block': 'test:color_block'}}},
         {'jsonrpc': '2.0', 'id': 4, 'method': 'tools/call', 'params': {'name': 'validate_plan', 'arguments': {'plan': plan}}},
         {'jsonrpc': '2.0', 'id': 5, 'method': 'tools/call', 'params': {'name': 'preview_plan', 'arguments': {'plan': plan}}},
+        {'jsonrpc': '2.0', 'id': 6, 'method': 'tools/call',
+         'params': {'name': 'get_block', 'arguments': {'block': 'test:rotating_beacon'}}},
     ]
-    command = server_command(tmp_path, AgentConfig())
+    # server_command runs inside the job's catalog scope, which is what decides the sidecar.
+    with using_catalog(wire_catalog):
+        command = server_command(tmp_path, AgentConfig())
     assert '--catalog' in command['args'] and str(catalog_path) in command['args']
     import subprocess
     completed = subprocess.run([command['command'], *command['args']],
@@ -179,10 +183,121 @@ def test_mcp_subprocess_uses_private_live_catalog_for_all_registry_tools(tmp_pat
     listed = replies[0]['result']['tools']
     assert 'test-build-a' in next(tool['description'] for tool in listed if tool['name'] == 'list_blocks')
     list_result = json.loads(replies[1]['result']['content'][0]['text'])
-    assert list_result['blocks'] == ['mod:beam', 'test:color_block', 'test:painted_beam']
+    assert list_result['blocks'] == ['mod:beam', 'test:color_block', 'test:painted_beam', 'test:rotating_beacon']
     get_result = json.loads(replies[2]['result']['content'][0]['text'])
     assert get_result['defaults'] == {'tone': 'amber'}
     assert json.loads(replies[3]['result']['content'][0]['text'])['valid']
     preview = json.loads(replies[4]['result']['content'][0]['text'])
     assert preview['valid'] and preview['replay_target'] == 'ORIGINAL source'
+    # The sidecar carries native value order all the way into the separate tool process.
+    beacon = json.loads(replies[5]['result']['content'][0]['text'])
+    assert beacon['properties']['facing'] == ['north', 'south', 'east', 'west']
+    assert beacon['properties']['rotation'] == [str(index) for index in range(16)]
     assert 'block_catalog' not in model_request and 'test:color_block' not in request_path.read_text()
+
+
+def test_server_command_omits_the_sidecar_only_for_a_genuinely_legacy_request(tmp_path):
+    """No live catalog in scope is a legacy/offline request; the tools then use bundled vanilla."""
+    command = server_command(tmp_path, AgentConfig())
+    assert '--catalog' not in command['args']
+
+
+def test_server_command_fails_when_a_live_job_has_no_sidecar(tmp_path):
+    """A missing required sidecar is a broken job, not evidence that this is a legacy request.
+
+    Without this, the planner tools would silently plan against bundled vanilla while final
+    validation used the live catalog.
+    """
+    with using_catalog(catalog_from_wire(catalog())):
+        with pytest.raises(FileNotFoundError, match='no sidecar'):
+            server_command(tmp_path, AgentConfig())
+
+
+def test_property_values_keep_the_servers_native_order():
+    """Mycelium block.catalog@2 law C6, on Core's side of the wire.
+
+    Sorting a domain as text is lossy in both directions: it reorders a direction enum,
+    and it claims '10' follows '1'. No layer may restore "order" by sorting.
+    """
+    live = catalog_from_wire(catalog())
+    beacon = live.blocks['test:rotating_beacon'].properties
+    assert beacon['facing'] == ('north', 'south', 'east', 'west')
+    assert beacon['rotation'] == tuple(str(index) for index in range(16))
+    with using_catalog(live):
+        assert get_block('test:rotating_beacon')['properties']['facing'] == ['north', 'south', 'east', 'west']
+        assert get_block('test:rotating_beacon')['properties']['rotation'] == [str(i) for i in range(16)]
+    # The sidecar the planner tools read carries the same order.
+    assert live.to_wire()['blocks']['test:rotating_beacon']['properties']['facing'] == \
+        ['north', 'south', 'east', 'west']
+
+
+def test_resolved_states_are_cached_per_catalog_not_per_minecraft_version():
+    """Two servers can report the same Minecraft version with different defaults and domains."""
+    same_version = {
+        'minecraft_version': 'test-build-a',
+        'blocks': {'test:color_block': {'properties': {'tone': ['amber', 'cyan']}, 'defaults': {'tone': 'cyan'}}},
+    }
+    first, second = catalog_from_wire(catalog()), catalog_from_wire(same_version)
+    assert first.minecraft_version == second.minecraft_version
+    with using_catalog(first):
+        assert resolved_state('test:color_block') == ('test:color_block', {'tone': 'amber'})
+    with using_catalog(second):
+        assert resolved_state('test:color_block') == ('test:color_block', {'tone': 'cyan'})
+    with using_catalog(first):
+        assert resolved_state('test:color_block') == ('test:color_block', {'tone': 'amber'})
+    # And with no catalog at all, the bundled fallback is unaffected by either.
+    assert resolved_state('minecraft:stone')[0] == 'minecraft:stone'
+
+
+def test_a_repeated_lookup_is_cached_and_its_result_stays_the_callers_own():
+    live = catalog_from_wire(catalog())
+    with using_catalog(live):
+        first = resolved_state('test:color_block')[1]
+        first['tone'] = 'mutated'
+        second = resolved_state('test:color_block')[1]
+        assert second == {'tone': 'amber'}, 'mutating a returned dict must not poison the cache'
+        assert first is not second, 'each caller gets its own dict'
+        # The cached value itself is a read-only view, and a repeat lookup is the same object
+        # rather than a fresh parse.
+        cached = live.resolved_state('test:color_block')[1]
+        with pytest.raises(TypeError):
+            cached['tone'] = 'mutated'
+        assert live.resolved_state('test:color_block')[1] is cached
+
+
+def test_planner_instructions_agree_with_the_active_registry_from_the_start():
+    """The base text must not assert vanilla and then be contradicted by an addendum."""
+    from worldprompt_core.agent import INSTRUCTIONS, registry_instructions
+    from worldprompt_core.operations import OPERATIONS
+
+    generated = ''.join(spec.guide for spec in OPERATIONS.values())
+    base = INSTRUCTIONS + generated
+    assert 'vanilla' not in base.lower(), 'the generic instructions may not claim a vanilla-only registry'
+
+    assert 'bundled vanilla Minecraft 26.3' in registry_instructions()
+    with using_catalog(catalog_from_wire(catalog('live-build-7'))):
+        live = registry_instructions()
+    assert 'live Minecraft live-build-7 server catalog' in live
+    assert 'authoritative' in live
+
+
+def test_a_catalogs_cache_does_not_keep_the_catalog_alive():
+    """The resolver must not form a reference cycle with its catalog.
+
+    A cycle would hold up to RESOLVED_STATE_CACHE resolved states per retired
+    catalog until a cyclic collection, on a Core that serves many jobs.
+    """
+    import gc
+    import weakref
+
+    live = catalog_from_wire(catalog())
+    with using_catalog(live):
+        resolved_state('test:color_block')
+        resolved_state('test:rotating_beacon[rotation=11]')
+    reference = weakref.ref(live)
+    gc.disable()           # only plain reference counting may free it
+    try:
+        del live
+        assert reference() is None, 'the resolved-state cache still holds its catalog'
+    finally:
+        gc.enable()

@@ -1,7 +1,6 @@
 package dev.worldprompt;
 
 import dev.worldprompt.kernel.CommandPolicy;
-
 import dev.worldprompt.mycelium.bridges.command_authorization.CommandPermissions;
 import dev.worldprompt.mycelium.bridges.command_authorization.NeoForgePermissions;
 import net.neoforged.fml.common.Mod;

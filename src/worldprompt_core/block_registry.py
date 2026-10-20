@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import json
 from difflib import get_close_matches
 from functools import lru_cache
@@ -29,6 +29,8 @@ _SCHEMAS = Path(__file__).parent / 'schemas'
 _BLOCK_ID = re.compile(r'^[a-z0-9_.-]+:[a-z0-9_./-]+$')
 _PROPERTY = re.compile(r'^[a-z0-9_]+$')
 _PROPERTY_VALUE = re.compile(r'^[a-z0-9_]+$')
+#: Resolved states cached per immutable catalog, and for the bundled fallback in ``core``.
+RESOLVED_STATE_CACHE = 8192
 
 
 @dataclass(frozen=True)
@@ -37,12 +39,63 @@ class BlockDefinition:
     defaults: Mapping[str, str]
 
 
+def _state_resolver(defaults: Mapping[str, Mapping[str, str]]):
+    """A bounded resolver for one snapshot's states.
+
+    It closes over that snapshot's defaults and never over the catalog itself, so
+    the cache cannot keep its catalog alive through a reference cycle: when the
+    catalog is dropped the resolver and its entries go with it.
+    """
+
+    @lru_cache(maxsize=RESOLVED_STATE_CACHE)
+    def resolve(state: str) -> tuple[str, Mapping[str, str]]:
+        base, explicit = parse_state(state)
+        return base, MappingProxyType(dict(defaults.get(base, {})) | explicit)
+
+    return resolve
+
+
 @dataclass(frozen=True)
 class BlockCatalog:
+    """One immutable snapshot: ``blocks`` is the only stored state.
+
+    ``properties`` and ``defaults`` are views derived from it, so there is one
+    source of truth for a block's domains. Each property's values keep the
+    order the server captured them in (Mycelium ``block.catalog@2`` law C6);
+    only the block and property names are sorted.
+    """
+
     minecraft_version: str
     blocks: Mapping[str, BlockDefinition]
-    properties: Mapping[str, Mapping[str, tuple[str, ...]]] = field(repr=False)
-    defaults: Mapping[str, Mapping[str, str]] = field(repr=False)
+
+    def __post_init__(self) -> None:
+        set_attribute = object.__setattr__
+        set_attribute(self, '_properties',
+                      MappingProxyType({block: definition.properties for block, definition in self.blocks.items()}))
+        defaults = MappingProxyType({block: definition.defaults for block, definition in self.blocks.items()})
+        set_attribute(self, '_defaults', defaults)
+        # One resolver per snapshot, so a context switch cannot read another server's states.
+        # Its values are read-only views: a caller's copy stays theirs.
+        set_attribute(self, '_resolve', _state_resolver(defaults))
+
+    @property
+    def properties(self) -> Mapping[str, Mapping[str, tuple[str, ...]]]:
+        """Block ID to its property domains."""
+        return self._properties
+
+    @property
+    def defaults(self) -> Mapping[str, Mapping[str, str]]:
+        """Block ID to its exact default state."""
+        return self._defaults
+
+    def resolved_state(self, state: str) -> tuple[str, Mapping[str, str]]:
+        """Resolve omitted properties against this catalog, cached per catalog.
+
+        Returns a read-only mapping; callers that hand it out copy it.
+        """
+        if not isinstance(state, str):
+            parse_state(state)  # Raises VolumeError; unhashable values must not reach the cache.
+        return self._resolve(state)
 
     def to_wire(self) -> dict:
         """Return a canonical detached JSON object for the job and tool sidecar."""
@@ -114,14 +167,12 @@ def catalog_from_wire(value) -> BlockCatalog:
             default = raw_defaults[name]
             if not _catalog_value(default) or default not in raw_domain:
                 raise ValueError(f'{block}[{name}] default must be one of its property values.')
-            properties[name] = tuple(sorted(raw_domain))
+            # The adapter sends the registry's own order; keep it. Duplicates were rejected above.
+            properties[name] = tuple(raw_domain)
             defaults[name] = default
         frozen_blocks[block] = BlockDefinition(MappingProxyType(properties), MappingProxyType(defaults))
 
-    frozen_blocks_view = MappingProxyType(frozen_blocks)
-    frozen_properties = MappingProxyType({block: definition.properties for block, definition in frozen_blocks.items()})
-    frozen_defaults = MappingProxyType({block: definition.defaults for block, definition in frozen_blocks.items()})
-    return BlockCatalog(version, frozen_blocks_view, frozen_properties, frozen_defaults)
+    return BlockCatalog(version, MappingProxyType(frozen_blocks))
 
 
 def _catalog_value(value):
@@ -132,6 +183,16 @@ def _catalog_value(value):
 def current_catalog() -> BlockCatalog | None:
     """The immutable catalog in this execution context, or None for offline fallback."""
     return _ACTIVE_CATALOG.get()
+
+
+def catalog_version() -> str:
+    """The Minecraft version the active registry describes: the live catalog's, else the bundled one's.
+
+    Every caller that labels registry data for a player or the model uses this, so a live
+    job never quotes the bundled version and an offline job never invents a live one.
+    """
+    catalog = current_catalog()
+    return catalog.minecraft_version if catalog is not None else VERSION
 
 
 @contextmanager
@@ -200,10 +261,8 @@ def validate_state(state):
     base, properties = parse_state(state)
     registry = block_properties()
     if base not in registry:
-        catalog = current_catalog()
-        version = catalog.minecraft_version if catalog is not None else VERSION
         suggestions = ['minecraft:iron_chain'] if base == 'minecraft:chain' else get_close_matches(base, registry, n=3)
-        raise VolumeError(f'Unknown Minecraft {version} block {base!r}. Suggestions: {suggestions}')
+        raise VolumeError(f'Unknown Minecraft {catalog_version()} block {base!r}. Suggestions: {suggestions}')
     for key, value in properties.items():
         if key not in registry[base]:
             raise VolumeError(f'{base} has no property {key!r}; accepted properties: {registry[base]}')
@@ -219,9 +278,7 @@ def list_blocks(query='', offset=0, limit=50):
         raise ValueError(f'offset must be nonnegative and limit must be 1–{MAX_BLOCK_PAGE}')
     names = sorted(name for name in block_properties() if query.lower() in name)
     end = offset + limit
-    catalog = current_catalog()
-    version = catalog.minecraft_version if catalog is not None else VERSION
-    return {'minecraft_version': version, 'total': len(names), 'blocks': names[offset:end],
+    return {'minecraft_version': catalog_version(), 'total': len(names), 'blocks': names[offset:end],
             'next_offset': end if end < len(names) else None}
 
 
@@ -229,7 +286,7 @@ def get_block(block):
     if not isinstance(block, str):
         raise ValueError('block must be a block ID')
     base, _ = validate_state(block)
-    return {'minecraft_version': current_catalog().minecraft_version if current_catalog() is not None else VERSION,
+    return {'minecraft_version': catalog_version(),
             'block': base,
             'properties': {name: list(values) for name, values in block_properties()[base].items()},
             'defaults': dict(block_defaults()[base])}

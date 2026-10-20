@@ -78,5 +78,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: worldprompt-${{ matrix.loader }}
-          path: ${{ matrix.loader }}/build/libs/worldprompt${{ matrix.loader == 'neoforge' && '-neoforge' || '' }}-${{ steps.mod_version.outputs.value }}.jar
+          path: ${{ matrix.loader }}/build/libs/worldprompt-${{ matrix.loader }}-${{ steps.mod_version.outputs.value }}.jar
           if-no-files-found: error

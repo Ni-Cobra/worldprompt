@@ -31,7 +31,8 @@ WorldPrompt has two parts, the **mod** and the **core**. Downloads :
 
 | Part | File |
 |---|---|
-| **The mod**, for your `mods` folder | [`worldprompt-1.0.0.jar`](https://github.com/Ni-Cobra/worldprompt/releases/download/fabric-v1.0.0/worldprompt-1.0.0.jar) |
+| **The mod** for **Fabric**, for your `mods` folder | [`worldprompt-fabric-1.0.0.jar`](https://github.com/Ni-Cobra/worldprompt/releases/download/fabric-v1.0.0/worldprompt-fabric-1.0.0.jar) |
+| **The mod** for **NeoForge**, for your `mods` folder | [`worldprompt-neoforge-1.0.0.jar`](https://github.com/Ni-Cobra/worldprompt/releases/download/neoforge-v1.0.0/worldprompt-neoforge-1.0.0.jar) |
 | **WorldPrompt Core** for Windows: the local app that talks to the AI | [`WorldPrompt-Core-1.0.0-windows-x86_64.zip`](https://github.com/Ni-Cobra/worldprompt/releases/download/core-v1.0.0/WorldPrompt-Core-1.0.0-windows-x86_64.zip) |
 | **WorldPrompt Core** for Linux | [`WorldPrompt-Core-1.0.0-linux-x86_64.tar.gz`](https://github.com/Ni-Cobra/worldprompt/releases/download/core-v1.0.0/WorldPrompt-Core-1.0.0-linux-x86_64.tar.gz) |
 
@@ -41,7 +42,11 @@ numbers can differ between the two. Older versions are on the
 
 **Requirements:**
 
-- [Fabric Loader](https://fabricmc.net/use/installer/) and [Fabric API](https://modrinth.com/mod/fabric-api) for Minecraft 26.3
+- Your loader for Minecraft 26.3, and nothing from the other one:
+  - **Fabric:** [Fabric Loader](https://fabricmc.net/use/installer/) **and**
+    [Fabric API](https://modrinth.com/mod/fabric-api)
+  - **NeoForge:** [NeoForge](https://neoforged.net/) 26.3.0.92 or newer. Fabric API is
+    neither needed nor usable here.
 - A ChatGPT or Claude subscription with its CLI: [Codex CLI](https://developers.openai.com/codex/cli)
   or [Claude Code](https://code.claude.com/docs/en/setup) (2.1.248 or newer). Core
   never installs or updates the CLI; if a planning run reports an incompatible CLI,
@@ -50,15 +55,17 @@ numbers can differ between the two. Older versions are on the
 No API key needed: WorldPrompt runs on the subscription you already have, and your
 credentials stay with the CLI.
 
-The 1.0.0 download above is for Fabric. The NeoForge jar can be built from this checkout
-for Minecraft 26.3. Install the artifact for your loader; NeoForge does not need Fabric
-Loader or Fabric API. Mycelium is used during development and is not an additional mod to
-install. See [developing with Mycelium](docs/mycelium.md).
+Install the jar for your loader and only that one. The two jars are the same mod and the
+same version: the same `/wp` commands, configuration and Core connection. Mycelium is used
+during development and is not an additional mod to install. See
+[developing with Mycelium](docs/mycelium.md).
 
 ## 🚀 Setup
 
-1. **Install the mod.** Put Fabric API and `worldprompt-<version>.jar` in your `mods`
-   folder, and remove any older WorldPrompt jar.
+1. **Install the mod.** Remove any older WorldPrompt jar, then put the jar for your
+   loader in your `mods` folder:
+   - **Fabric:** `worldprompt-fabric-<version>.jar`, together with Fabric API.
+   - **NeoForge:** `worldprompt-neoforge-<version>.jar`. Nothing else is needed.
 2. **Sign in to the CLI.** Run `codex login` or `claude auth login` once in a terminal,
    using the same computer and user account you play Minecraft on.
 3. **Start Core.** Extract the whole archive, then run `WorldPrompt-Core.exe` on Windows
@@ -232,6 +239,14 @@ Running headless, building the Windows and Linux bundles, CI and releases are co
 
 ### Versioning
 
+There are two versioned components: **Core** and **the mod**. Fabric and NeoForge are
+not separate components. They are one mod built for two loaders: they read their version
+from the same `fabric/gradle.properties`, so they always carry the same version, and they
+are released together from the same commit, as a matching pair of `fabric-vX.Y.Z` and
+`neoforge-vX.Y.Z` tags. Their jars differ only in loader and name
+(`worldprompt-fabric-<version>.jar` and `worldprompt-neoforge-<version>.jar`). Never
+release or bump one loader without the other.
+
 Core and the mod share `MAJOR.MINOR`, and `MINOR` is the Core ↔ mod API: a change that
 breaks compatibility between them raises it in both. `PATCH` is independent per
 component. `MAJOR` changes only when the maintainer decides. Core and the mod check
@@ -244,8 +259,12 @@ code, resources or packaging changed gets a patch bump, or both components get t
 minor version if the Core ↔ mod API changed. A component the branch didn't touch keeps
 its version. Changes to docs, the README, CI or agent guidance alone bump nothing.
 
-Releases are cut from `master` by pushing a `core-vX.Y.Z`, `fabric-vX.Y.Z` or
-`neoforge-vX.Y.Z` tag. CI builds and verifies that component and drafts the GitHub release (see
+Releases are cut from `master` by pushing a `core-vX.Y.Z` tag, or the mod's
+`fabric-vX.Y.Z` and `neoforge-vX.Y.Z` pair. CI builds and verifies each tagged jar or
+bundle and drafts its GitHub release. The release workflow rejects a loader tag that
+contradicts its sibling — one on a different commit, or this commit already tagged for
+the other loader at a different version — but it cannot require a sibling that has not
+been pushed yet, so pushing the pair together stays a matter of following the policy (see
 [docs/development.md](docs/development.md)). Each bump updates every place the version
 lives, including the download links and `Current versions:` line in this README, and
 `tests/test_version_sync.py` checks that they agree. The full agent workflow is in

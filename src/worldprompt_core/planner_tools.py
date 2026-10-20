@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 import sys
 
-from .block_registry import (VERSION, BlockCatalog, current_catalog, get_block, list_blocks, read_catalog_file,
-                             using_catalog)
+from .block_registry import (BlockCatalog, catalog_version, current_catalog, get_block, list_blocks,
+                             read_catalog_file, using_catalog)
 from .core import validate_plan
 from . import wsl
 from .limits import (DEFAULT_CAMERA_FOV, MAX_BLOCK_PAGE, MAX_BLOCK_QUERY_CHARS, MAX_CAMERA_DISTANCE, MAX_CAMERA_FOV,
@@ -29,8 +29,13 @@ def server_command(job_dir, config):
         # An explicit import root also supports an uninstalled source checkout.
         bootstrap = 'import sys; sys.path.insert(0, ' + repr(str(Path(__file__).resolve().parents[1])) + '); from worldprompt_core.__main__ import main; sys.exit(main())'
         command = [executable, '-c', bootstrap, 'planner-tools', '--request', str(job_dir / 'request.json')]
-    catalog_path = Path(job_dir) / 'block-catalog.json'
-    if catalog_path.is_file():
+    # A live job's catalog is authoritative, including in this subprocess. Pass it explicitly when
+    # this scope has one: a missing sidecar is a broken job, not evidence of a legacy request, and
+    # planning against bundled vanilla would silently disagree with final validation.
+    if current_catalog() is not None:
+        catalog_path = Path(job_dir) / 'block-catalog.json'
+        if not catalog_path.is_file():
+            raise FileNotFoundError(f'This job has a live block catalog but no sidecar at {catalog_path}.')
         command.extend(['--catalog', str(catalog_path)])
     if wsl.windows_cli(config):
         command = wsl.wsl_exec(command)
@@ -46,8 +51,7 @@ def tool_definitions():
                                 'required': list(required), 'additionalProperties': False},
                 'annotations': {'readOnlyHint': True, 'destructiveHint': False,
                                 'idempotentHint': True, 'openWorldHint': False}}
-    catalog = current_catalog()
-    version = catalog.minecraft_version if catalog is not None else VERSION
+    version = catalog_version()
     return [tool('list_blocks', f'Search or paginate all Minecraft {version} block IDs.',
                  {'query': {'type': 'string', 'maxLength': MAX_BLOCK_QUERY_CHARS}, 'offset': {'type': 'integer', 'minimum': 0},
                   'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_BLOCK_PAGE}}),
@@ -99,6 +103,11 @@ class PlannerTools:
         with using_catalog(self.catalog):
             return self._call(name, arguments)
 
+    def definitions(self):
+        """The tool list, described by this server's own catalog."""
+        with using_catalog(self.catalog):
+            return tool_definitions()
+
     def _call(self, name, arguments):
         self.calls += 1
         if self.calls > MAX_TOOL_CALLS:
@@ -133,61 +142,61 @@ def serve(request_path, input_stream=None, output_stream=None, catalog_path=None
     request = json.loads(Path(request_path).read_text(encoding='utf-8'))
     catalog = read_catalog_file(catalog_path) if catalog_path is not None else None
     server = PlannerTools(request, Path(request_path).parent, catalog)
-    return _serve_loop(server, catalog, input_stream, output_stream)
+    return _serve_loop(server, input_stream, output_stream)
 
 
-def _serve_loop(server, catalog, input_stream, output_stream):
+def _serve_loop(server, input_stream, output_stream):
+    # The server owns the catalog and scopes every call; see PlannerTools.call and definitions.
     limit = 1024 * 1024
-    with using_catalog(catalog):
-        while raw := input_stream.readline(limit + 1):
-            if len(raw) > limit:
-                return 1
-            identifier = None
-            try:
-                message = json.loads(raw)
-                if not isinstance(message, dict) or message.get('jsonrpc') != '2.0':
-                    raise ValueError('Invalid JSON-RPC request')
-                if 'id' not in message:
-                    continue
-                identifier = message['id']
-                method = message.get('method')
-                if method == 'initialize':
+    while raw := input_stream.readline(limit + 1):
+        if len(raw) > limit:
+            return 1
+        identifier = None
+        try:
+            message = json.loads(raw)
+            if not isinstance(message, dict) or message.get('jsonrpc') != '2.0':
+                raise ValueError('Invalid JSON-RPC request')
+            if 'id' not in message:
+                continue
+            identifier = message['id']
+            method = message.get('method')
+            if method == 'initialize':
+                params = message.get('params', {})
+                protocol = params.get('protocolVersion') if isinstance(params, dict) else None
+                if protocol not in {'2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'}:
+                    protocol = '2024-11-05'
+                result = {'protocolVersion': protocol, 'capabilities': {'tools': {}},
+                          'serverInfo': {'name': 'worldprompt', 'version': '1.0'}}
+            elif method == 'ping':
+                result = {}
+            elif method == 'tools/list':
+                result = {'tools': server.definitions()}
+            elif method == 'tools/call':
+                try:
                     params = message.get('params', {})
-                    protocol = params.get('protocolVersion') if isinstance(params, dict) else None
-                    if protocol not in {'2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'}:
-                        protocol = '2024-11-05'
-                    result = {'protocolVersion': protocol, 'capabilities': {'tools': {}},
-                              'serverInfo': {'name': 'worldprompt', 'version': '1.0'}}
-                elif method == 'ping':
-                    result = {}
-                elif method == 'tools/list':
-                    result = {'tools': tool_definitions()}
-                elif method == 'tools/call':
-                    try:
-                        params = message.get('params', {})
-                        if not isinstance(params, dict):
-                            raise ValueError('Tool params must be an object')
-                        value = server.call(params.get('name'), params.get('arguments', {}))
-                        image = value.pop('_image', None)
-                        result = {'content': [{'type': 'text', 'text': json.dumps(value)}], 'isError': False}
-                        if image is not None:
-                            result['content'].append({'type': 'image', 'mimeType': 'image/png', 'data': image})
-                    except (ValueError, TypeError, KeyError) as exc:
-                        result = {'content': [{'type': 'text', 'text': str(exc)}], 'isError': True}
-                    except Exception as exc:
-                        # Keep serving after an unexpected tool failure; the call still
-                        # counts toward the budget.
-                        result = {'content': [{'type': 'text', 'text': f'Tool call failed ({type(exc).__name__}); adjust the arguments or continue without it.'}],
-                                  'isError': True}
-                else:
-                    output_stream.write(json.dumps({'jsonrpc': '2.0', 'id': identifier,
-                                        'error': {'code': -32601, 'message': 'Method not found'}}) + '\n')
-                    output_stream.flush()
-                    continue
-                response = {'jsonrpc': '2.0', 'id': identifier, 'result': result}
-            except (ValueError, TypeError, KeyError, RecursionError):
-                response = {'jsonrpc': '2.0', 'id': identifier,
-                            'error': {'code': -32600, 'message': 'Invalid request'}}
-            output_stream.write(json.dumps(response) + '\n')
-            output_stream.flush()
+                    if not isinstance(params, dict):
+                        raise ValueError('Tool params must be an object')
+                    value = server.call(params.get('name'), params.get('arguments', {}))
+                    image = value.pop('_image', None)
+                    result = {'content': [{'type': 'text', 'text': json.dumps(value)}], 'isError': False}
+                    if image is not None:
+                        result['content'].append({'type': 'image', 'mimeType': 'image/png', 'data': image})
+                except (ValueError, TypeError, KeyError) as exc:
+                    result = {'content': [{'type': 'text', 'text': str(exc)}], 'isError': True}
+                except Exception as exc:
+                    # Keep serving after an unexpected tool failure; the call still
+                    # counts toward the budget.
+                    result = {'content': [{'type': 'text', 'text': f'Tool call failed ({type(exc).__name__}); adjust the arguments or continue without it.'}],
+                              'isError': True}
+            else:
+                output_stream.write(json.dumps({'jsonrpc': '2.0', 'id': identifier,
+                                    'error': {'code': -32601, 'message': 'Method not found'}}) + '\n')
+                output_stream.flush()
+                continue
+            response = {'jsonrpc': '2.0', 'id': identifier, 'result': result}
+        except (ValueError, TypeError, KeyError, RecursionError):
+            response = {'jsonrpc': '2.0', 'id': identifier,
+                        'error': {'code': -32600, 'message': 'Invalid request'}}
+        output_stream.write(json.dumps(response) + '\n')
+        output_stream.flush()
     return 0

@@ -1,13 +1,12 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.CoreLimits;
-import dev.worldprompt.kernel.PromptRequest;
-import dev.worldprompt.mycelium.world_replay.v1.model.ReplayTraversal;
-
 import static org.junit.jupiter.api.Assertions.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.worldprompt.kernel.CoreLimits;
+import dev.worldprompt.kernel.PromptRequest;
+import dev.worldprompt.mycelium.world_replay.v1.model.ReplayTraversal;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;

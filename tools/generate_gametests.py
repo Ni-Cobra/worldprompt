@@ -23,6 +23,10 @@ FABRIC_WORLD_EDIT = (
 )
 FABRIC_EMPTY_STRUCTURE = "fabric-gametest-api-v1:empty"
 TEST_MOD_ID = "worldprompt"
+# Fabric's GameTest API ships an empty structure for tests that build their own world. NeoForge has
+# no equivalent, so every generated registration points at the checked-in
+# neoforge/src/gametest/resources/data/worldprompt/structure/empty.nbt, which stands in for it.
+EMPTY_STRUCTURE_RESOURCE = "data/worldprompt/structure/empty.nbt"
 
 
 @dataclass(frozen=True)
@@ -162,6 +166,7 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 @EventBusSubscriber(modid = "{TEST_MOD_ID}")
 public final class WorldPromptGameTests {{
     private static final String MOD_ID = "{TEST_MOD_ID}";
+    /** Stands in for Fabric's built-in empty GameTest structure; see {EMPTY_STRUCTURE_RESOURCE}. */
     private static final Identifier EMPTY_STRUCTURE = Identifier.fromNamespaceAndPath(MOD_ID, "empty");
 
     private WorldPromptGameTests() {{
@@ -193,12 +198,101 @@ public final class WorldPromptGameTests {{
 '''
 
 
+#: Records exactly which files this generator wrote, so pruning can only ever remove its own.
+MANIFEST = ".generate-gametests-manifest"
+
+
+def previously_written(output_dir: Path) -> set[Path]:
+    """The files this generator wrote here last time, or nothing if it has never run here.
+
+    Ownership is recorded, not inferred, so a file this generator did not write is not a
+    pruning candidate. The manifest is an ordinary file in a build directory, which means
+    it can also be corrupt, hand-edited, or copied in from another checkout: every entry
+    has to earn its place. An entry is kept only if it is a relative path, free of ``..``,
+    names a Java file and lands inside this output directory. Anything else is ignored,
+    and an unreadable manifest simply owns nothing, so the worst a bad manifest can do is
+    leave a stale file behind.
+    """
+    manifest = output_dir / MANIFEST
+    try:
+        lines = manifest.read_text(encoding="utf-8").splitlines() if manifest.is_file() else []
+    except (OSError, UnicodeDecodeError):
+        print(f"Ignoring an unreadable ownership manifest at {manifest}; nothing will be pruned this run.")
+        return set()
+    owned = set()
+    for line in lines:
+        if not line or line.startswith("#"):
+            continue
+        entry = Path(line)
+        if entry.is_absolute() or ".." in entry.parts or entry.suffix != ".java":
+            continue
+        candidate = output_dir / entry
+        if candidate.is_relative_to(output_dir):
+            owned.add(candidate)
+    return owned
+
+
+def record_written(output_dir: Path, written: set[Path]) -> None:
+    """Write the ownership manifest, once a generation has succeeded."""
+    header = "# Written by tools/generate_gametests.py. Only the files listed here are ever pruned.\n"
+    listed = sorted(path.relative_to(output_dir).as_posix() for path in written)
+    (output_dir / MANIFEST).write_text(header + "".join(line + "\n" for line in listed),
+                                       encoding="utf-8", newline="\n")
+
+
+def unknown_sources(output_dir: Path, written: set[Path]) -> list[Path]:
+    """Java files in the output tree this generator neither wrote nor owns."""
+    return sorted(path for path in output_dir.rglob("*.java") if path.is_file() and path not in written)
+
+
+def write_if_changed(path: Path, text: str) -> None:
+    """Write only real changes, so a second generation leaves the build's inputs alone."""
+    try:
+        if path.is_file() and path.read_text(encoding="utf-8") == text:
+            return
+    except (OSError, UnicodeDecodeError):
+        pass            # unreadable or not text: treat it as changed and rewrite it
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def prune(output_dir: Path, written: set[Path], owned: set[Path]) -> list[Path]:
+    """Remove files this generator wrote before and did not write now, and nothing else.
+
+    Without this, renaming or deleting a Fabric GameTest leaves its generated copy behind
+    and NeoForge keeps compiling and running a test that no longer exists. ``owned`` comes
+    from the manifest, so a file this generator never wrote is never a candidate: pointing
+    --output-dir at a hand-written tree cannot delete it, on this run or any later one.
+    """
+    removed = []
+    for path in sorted(owned - written):
+        if path.is_file():
+            path.unlink()
+            removed.append(path)
+    # Only the directories those removals emptied, deepest first so a parent is considered
+    # after its children. Two removals can share a directory, so each one is visited once
+    # and only while it is still there: the first visit may already have removed it.
+    emptied = {parent for path in removed for parent in path.parents
+               if parent != output_dir and parent.is_relative_to(output_dir)}
+    for directory in sorted(emptied, key=lambda path: len(path.parts), reverse=True):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+    return removed
+
+
 def generate(source_root: Path, output_dir: Path) -> int:
     source_root = source_root.resolve()
     output_dir = output_dir.resolve()
     if not source_root.is_dir():
         raise FileNotFoundError(f"Fabric GameTest source directory does not exist: {source_root}")
+    # The output tree is pruned, so it must never be, or contain, the hand-written sources.
+    if source_root == output_dir or output_dir.is_relative_to(source_root) or source_root.is_relative_to(output_dir):
+        raise ValueError(f"The generated output directory must be separate from the sources: {output_dir}")
+    owned = previously_written(output_dir)
 
+    # Everything is converted and checked before a single file is written, so a run that
+    # fails validation leaves the output tree exactly as it found it.
+    planned: dict[Path, str] = {}
     tests: list[tuple[str, str, TestMetadata]] = []
     sources = sorted(source_root.rglob("*.java"))
     if not sources:
@@ -231,10 +325,7 @@ def generate(source_root: Path, output_dir: Path) -> int:
             )
         if "net.fabricmc." in source or "@GameTest" in source:
             raise ValueError(f"unconverted Fabric GameTest dependency remains in {path}")
-        relative = path.relative_to(source_root)
-        target = output_dir / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(source, encoding="utf-8", newline="\n")
+        planned[output_dir / path.relative_to(source_root)] = source
 
     if not tests:
         raise ValueError(f"no @GameTest methods found under {source_root}")
@@ -244,10 +335,26 @@ def generate(source_root: Path, output_dir: Path) -> int:
             raise ValueError("the catalog GameTest environment changed; update its native NeoForge mapping")
     if len({(class_name, method_name) for class_name, method_name, _ in tests}) != len(tests):
         raise ValueError("duplicate @GameTest methods found")
-
     registry = output_dir / "dev" / "worldprompt" / "WorldPromptGameTests.java"
-    registry.parent.mkdir(parents=True, exist_ok=True)
-    registry.write_text(generated_registry(tests), encoding="utf-8", newline="\n")
+    # One character from the existing WorldPromptGameTest: a source of this name would be
+    # replaced by the generated registry without a word, so say so instead.
+    if registry in planned:
+        raise ValueError(f"a Fabric GameTest is named after the generated registry "
+                         f"({registry.name}); rename it so it is not overwritten")
+    planned[registry] = generated_registry(tests)
+
+    for target, text in planned.items():
+        write_if_changed(target, text)
+    written = set(planned)
+    for stale in prune(output_dir, written, owned):
+        print(f"Removed stale generated test {stale.relative_to(output_dir)}.")
+    # Recorded only once generation succeeded, so a failed run claims nothing.
+    record_written(output_dir, written)
+    strays = unknown_sources(output_dir, written)
+    if strays:
+        named = ", ".join(str(path.relative_to(output_dir)) for path in strays[:5])
+        print(f"{len(strays)} Java file(s) here were not written by this generator, so they are never "
+              f"pruned: {named}{', ...' if len(strays) > 5 else ''}. Remove them by hand if they are stale.")
     return len(tests)
 
 

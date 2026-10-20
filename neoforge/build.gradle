@@ -93,7 +93,7 @@ mycelium {
     namespace = 'dev.worldprompt.mycelium'
     minecraft = modProperties.getProperty('minecraft_version')
     loader = 'neoforge'
-    contracts('command.authorization@1', 'world.replay@1', 'block.catalog@1')
+    contracts('command.authorization@1', 'world.replay@1', 'block.catalog@2')
     bridges {
         conformance('gametest')
         conformanceClassesOutOfJar()

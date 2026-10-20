@@ -94,7 +94,7 @@ def coord(value, dimensions, name):
     return value
 
 
-@lru_cache(maxsize=8192)
+@lru_cache(maxsize=block_registry.RESOLVED_STATE_CACHE)
 def _resolved_state(state):
     base, properties = parse_state(state)
     return base, block_registry.block_defaults().get(base, {}) | properties
@@ -103,8 +103,10 @@ def _resolved_state(state):
 def resolved_state(state):
     """Resolve omitted properties as Minecraft does during placement.
 
-    Vanilla fallback results are cached per state string. Live catalogs are
-    looked up in the current job scope and never enter that global cache.
+    Both paths are cached, because a large plan resolves the same states over and
+    over. The bundled fallback is cached globally per state string; a live catalog
+    caches on the catalog itself, so two servers on the same Minecraft version
+    never share an entry and a job's cache is released with its catalog.
     """
     if not isinstance(state, str):
         parse_state(state)  # Raises VolumeError; unhashable values must not reach the cache.
@@ -112,8 +114,7 @@ def resolved_state(state):
     if catalog is None:
         base, properties = _resolved_state(state)
     else:
-        base, explicit = parse_state(state)
-        properties = catalog.defaults.get(base, {}) | explicit
+        base, properties = catalog.resolved_state(state)
     return base, dict(properties)
 
 

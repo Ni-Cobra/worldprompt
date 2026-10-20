@@ -1,9 +1,13 @@
 name: Release
 
-# Core and the mod version independently; each loader has its own release tag:
-#   core-v1.0.0    builds the Windows bundle, Linux bundle and wheel
-#   fabric-v1.0.0  builds the Fabric mod jar
+# Core and the mod are the two independently versioned components:
+#   core-v1.0.0     builds the Windows bundle, Linux bundle and wheel
+#   fabric-v1.0.0   builds the Fabric mod jar
 #   neoforge-v1.0.0 builds the NeoForge mod jar
+# Fabric and NeoForge are one component. They share fabric/gradle.properties, so they
+# always carry the same version, and they are released together: push both loader tags at
+# the same version, on the same commit. The job below holds that — a loader tag whose
+# sibling exists elsewhere, or at another version, fails rather than shipping half a release.
 # The tag must match the version in the source at the tagged commit. Review the
 # draft release and its notes on GitHub, then publish it.
 on:
@@ -21,6 +25,8 @@ jobs:
       version: ${{ steps.tag.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check the tag against the source version
         id: tag
         env:
@@ -45,6 +51,25 @@ jobs:
               echo "::error::Tag $TAG does not match fabric/gradle.properties ($mod)."
               exit 1
             fi
+            # Fabric and NeoForge are one component, released together from one commit.
+            # The sibling tag may not exist yet (whichever is pushed first), but if it does
+            # it must name this same version and the same commit.
+            if [ "$component" = fabric ]; then sibling=neoforge; else sibling=fabric; fi
+            if git rev-parse -q --verify "refs/tags/$sibling-v$version" >/dev/null; then
+              here=$(git rev-list -n 1 "refs/tags/$TAG")
+              there=$(git rev-list -n 1 "refs/tags/$sibling-v$version")
+              if [ "$here" != "$there" ]; then
+                echo "::error::$TAG and $sibling-v$version are on different commits; the mod's loaders release together."
+                exit 1
+              fi
+            fi
+            for other in $(git tag --list "$sibling-v*"); do
+              if [ "${other#$sibling-v}" != "$version" ] \
+                 && [ "$(git rev-list -n 1 "refs/tags/$other")" = "$(git rev-list -n 1 "refs/tags/$TAG")" ]; then
+                echo "::error::This commit is already tagged $other; both loaders must carry version $version."
+                exit 1
+              fi
+            done
           fi
           echo "component=$component" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -85,7 +110,7 @@ jobs:
             allowed='^worldprompt-neoforge-VERSION\.jar$'
             title="WorldPrompt NeoForge mod $VERSION"
           else
-            allowed='^worldprompt-VERSION\.jar$'
+            allowed='^worldprompt-fabric-VERSION\.jar$'
             title="WorldPrompt Fabric mod $VERSION"
           fi
           allowed="${allowed//VERSION/${VERSION//./\\.}}"

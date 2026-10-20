@@ -1,10 +1,9 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.PromptRequest;
-import dev.worldprompt.mycelium.world_replay.v1.model.ReplayCursor;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import dev.worldprompt.kernel.PromptRequest;
+import dev.worldprompt.mycelium.world_replay.v1.model.ReplayCursor;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;

@@ -1,11 +1,10 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.RegionBounds;
-
 import static org.junit.jupiter.api.Assertions.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import dev.worldprompt.kernel.RegionBounds;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

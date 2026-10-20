@@ -1,10 +1,9 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.PromptRequest;
-import dev.worldprompt.kernel.TextSanitizer;
-
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import dev.worldprompt.kernel.PromptRequest;
+import dev.worldprompt.kernel.TextSanitizer;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.component.DataComponents;

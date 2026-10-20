@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .block_registry import VERSION as MINECRAFT_VERSION
 from .limits import MAX_BLOCK_CHOICES, MAX_OPERATIONS, MAX_STATE_CHARS, MAX_SUMMARY_CHARS
 
 PLAN_VERSION = 1
@@ -128,7 +127,7 @@ OPERATIONS: dict[str, OpSpec] = {spec.name: spec for spec in (
            "are supported by the target block (e.g. log axis survives replacement with a\n"
            "crimson stem). Unsupported properties are dropped; explicit target properties\n"
            "win. Use false to use only the specified target state. Compatibility comes from\n"
-           f"the vanilla Minecraft {MINECRAFT_VERSION} registry; unknown/modded targets inherit no properties.\n"),
+           "this job's active block registry; a target it does not list inherits no properties.\n"),
     OpSpec("hollow_box", "box", _fields(_BOX, _THICKNESS),
            "hollow_box: paint the shell of thickness blocks; interior is unchanged. To clear\n"
            "an interior, use an air fill first. Ensure thickness fits the box dimensions.\n",

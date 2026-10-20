@@ -1,8 +1,7 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.RegionBounds;
-
 import static org.junit.jupiter.api.Assertions.*;
+import dev.worldprompt.kernel.RegionBounds;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;

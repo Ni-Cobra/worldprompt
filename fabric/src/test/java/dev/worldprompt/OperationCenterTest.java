@@ -1,10 +1,9 @@
 package dev.worldprompt;
 
-import dev.worldprompt.kernel.RegionBounds;
-
-import com.google.gson.JsonParser;
-import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.google.gson.JsonParser;
+import dev.worldprompt.kernel.RegionBounds;
+import org.junit.jupiter.api.Test;
 
 class OperationCenterTest {
     @Test void inclusiveCuboidCenterUsesWorldBlockCenters() {

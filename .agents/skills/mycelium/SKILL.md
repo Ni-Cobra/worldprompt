@@ -13,9 +13,12 @@ useful laws; code being shared is not sufficient by itself.
 ## Find the current source of truth
 
 First locate the Mycelium checkout selected by the build: inspect the actual build files, `mycelium.lock` and
-`MYCELIUM_HOME`. If no selected checkout exists, run `./mycelium prepare` (`mycelium.cmd prepare` on Windows); it fetches the
-locked base and verifies the source patch. Do not substitute upstream `HEAD`, change the lock, or invent a revision as
-part of ordinary feature work.
+`MYCELIUM_HOME`. If no selected checkout exists, run `./mycelium prepare` (`mycelium.cmd prepare` on Windows); it
+fetches the locked commit and verifies the selected source against the lock. The lock can also carry a
+content-addressed patch, which is how compiler work that is not upstream yet travels with the consumer change that
+needs it. WorldPrompt pins a plain published commit whenever the source it needs is already there, so a lock with no
+`patch` field is the normal case, not a missing step. Do not substitute upstream `HEAD`, change the lock, or invent a
+revision as part of ordinary feature work.
 
 The public project is [worflor/mycelium](https://github.com/worflor/mycelium); use the selected checkout for
 version-specific API details. Read WorldPrompt's relevant package and tests, then read that checkout's `AGENTS.md`,

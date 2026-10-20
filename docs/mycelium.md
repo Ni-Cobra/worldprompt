@@ -61,10 +61,32 @@ block choices, warnings, matching, sounds and undo. The contract defines travers
 When an important feature guarantee needs to change, develop its contract and use together. Reusable compiler and
 compatibility improvements belong in Mycelium.
 
-Block discovery uses `block.catalog@1` and its `block-catalog` bridge. The bridge reads the initialized native registry,
-including mod namespaces, into an immutable model of property domains and defaults. WorldPrompt applies protocol limits
-and sends the snapshot with each job. Core uses it for planner tools, previews, validation and replay compilation. It
-does not mix catalogs from different servers or silently add blocks from the vanilla fallback.
+Block discovery uses `block.catalog@2` and its `block-catalog` bridge. The bridge reads the initialized native registry,
+including mod namespaces, into an immutable model of property domains and defaults. Each domain keeps the order the game
+declares it in, which `@2` makes a law: sorting it as text reorders a direction enum and claims `10` follows `1`, and no
+later layer can recover the real order. WorldPrompt applies protocol limits and sends the snapshot with each job. Core
+uses it for planner tools, previews, validation and replay compilation. It does not mix catalogs from different servers
+or silently add blocks from the vanilla fallback.
+
+A registry entry that WorldPrompt's own protocol cannot represent, such as a block with more property values than the
+protocol carries or a value outside its block-state syntax, is left out of the snapshot and logged: that block costs
+itself, not the catalog and not the mod. Three failures are coarser, because they happen before WorldPrompt sees an
+entry or apply to the snapshot as a whole, and they all end the same way — no catalog is sent, and the job plans against Core's
+bundled vanilla registry, which the log and the planner's own instructions state plainly:
+
+- the contract rejects the capture outright, which it does for a definition that breaks its construction laws: a value
+  carrying whitespace, a comma, an equals sign or a square bracket, an empty or duplicated domain, a noncanonical block
+  id or property name. The capture is one call, so one such block costs the whole live catalog, and this server's
+  modded blocks go with it. A value's name comes from the property itself, so for an ordinary
+  `EnumProperty` it is whatever the enum's `getSerializedName()` returns and the mod chooses it;
+  vanilla's own values are all within the syntax.
+- the server's Minecraft version string is longer than the protocol allows or carries control characters.
+- nothing representable is left, the snapshot is past a protocol total (blocks, properties or values), or the encoded
+  snapshot is past the protocol's byte limit.
+
+Either way the mod keeps working and every `/wp` command stays available; only the live catalog is missing. The mod
+never sends a partial snapshot as if it were the server's, and the only record is one error line at server start, so a
+player sees the loss as unknown-block planning failures rather than a message of its own.
 
 ## Choosing the project shape
 
@@ -97,7 +119,8 @@ has the Core and mod test commands, including the full game test runs.
 
 The build uses a separate checkout of [Mycelium](https://github.com/worflor/mycelium), selected by `mycelium.lock`.
 The maintained source wrapper needs Git and Java 17 or later. It creates the ignored `.mycelium/` checkout from the
-locked commit and optional verified patch:
+locked commit, and from a verified patch when the lock carries one. A patch is only how unpublished compiler work
+travels with a consumer change; once that work is upstream, the lock pins the published commit and carries no patch:
 
 ```powershell
 .\mycelium.cmd prepare

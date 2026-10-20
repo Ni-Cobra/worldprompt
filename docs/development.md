@@ -73,7 +73,7 @@ Some tests pin contracts shared with the rest of the repository:
 
 Use Java 25. Both loader modules compile the shared `common/` and `pure/` sources with
 Mycelium. The [Mycelium guide](mycelium.md) explains the source layout, compiler pin and
-workflow. Root `build` produces `fabric/build/libs/worldprompt-<version>.jar` and
+workflow. Root `build` produces `fabric/build/libs/worldprompt-fabric-<version>.jar` and
 `neoforge/build/libs/worldprompt-neoforge-<version>.jar`, along with sources jars. Each
 loader also has a wrapper for focused development.
 
@@ -173,7 +173,7 @@ This produces `dist/worldprompt_core-<version>-py3-none-any.whl`. It includes th
 | Job | Runs on | Steps |
 |---|---|---|
 | `core` | Ubuntu 22.04, Windows 2022 (Python 3.12) | `pip install ".[test,build]"`, `pytest -q`, `scripts/build_core.py` (with the glibc 2.35 limit on Linux), wheel (Linux only); uploads the archives and wheel |
-| `mod` (Fabric and NeoForge matrix) | Ubuntu 22.04 (Temurin 25, Python 3.12) | Bootstrap the pinned compiler; `./gradlew :<loader>:build`; upload that loader's mod jar |
+| `mod` (Fabric and NeoForge matrix) | Ubuntu 22.04 (Temurin 25, Python 3.12) | Bootstrap the pinned compiler; `./gradlew :<loader>:build`; upload that loader's mod jar (`worldprompt-<loader>-<version>.jar`) |
 
 Run `pytest -q` and `./gradlew build` locally before submitting. CI also builds and smoke-tests native Core bundles on Linux and Windows; those packaging checks need their respective operating systems.
 
@@ -186,12 +186,14 @@ Version locations:
 | Component | Locations |
 |---|---|
 | Core | `pyproject.toml`, `src/worldprompt_core/__init__.py`, the footer in `src/worldprompt_core/static/index.html` |
-| Mod | `fabric/gradle.properties`, plus `fabric/README.md` (the `targets Minecraft` line, jar names and the `Use Core X with mod Y` sentence) |
-| Both | The Download table links and the "Current versions" line in `README.md` |
+| Mod (both loaders) | `fabric/gradle.properties`, plus `fabric/README.md` (the `targets Minecraft` line, jar names and the `Use Core X with mod Y` sentence) and `neoforge/README.md` (jar name and the Core version) |
+| Both | The Download table links and the "Current versions" line in `README.md`, the fake Core version in `tools/lane/lane.py`, and the jar name in `tools/lane/README.md` |
+
+Fabric and NeoForge are one component. They read `fabric/gradle.properties`, so they always carry the same version and are released together; see the [README](../README.md#versioning).
 
 `tests/test_version_sync.py` fails when these disagree.
 
-To release, merge the version-bump commit into `master`, then push a tag for each component being released:
+To release, merge the version-bump commit into `master`, then push a tag for each component being released. The mod's two loader tags are pushed as a pair, at the same version and on the same commit:
 
 ```bash
 git tag core-vX.Y.Z   && git push origin core-vX.Y.Z      # Core
@@ -201,7 +203,7 @@ git tag neoforge-vX.Y.Z && git push origin neoforge-vX.Y.Z # NeoForge mod
 
 Plain `vX.Y.Z` tags are ignored. `.github/workflows/release.yml` then:
 
-1. Checks the tag against the source: `pyproject.toml` and `__init__.py` for `core-v*`, `fabric/gradle.properties` for both loader tags. A mismatch fails the run.
+1. Checks the tag against the source: `pyproject.toml` and `__init__.py` for `core-v*`, `fabric/gradle.properties` for both loader tags. A mismatch fails the run. For a loader tag it also holds the shared mod component: if the other loader's tag exists it must name the same version and the same commit, and this commit must not already be tagged for that loader at a different version. It cannot require the sibling tag itself, since whichever is pushed first arrives alone; pushing both is the policy, not a gate.
 2. Calls `build.yml` for that component only, which runs the full checks above.
 3. Creates a draft GitHub release named for the component and version. It attaches `SHA256SUMS.txt` and the build outputs: the Windows zip, Linux tarball and wheel for Core, or the mod jar (not the sources jar) for the mod. Generated notes cover changes since the previous tag of the same component. Any unexpected file in the output aborts the release.
 

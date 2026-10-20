@@ -10,7 +10,6 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 import zipfile
 
 HERE = Path(__file__).resolve().parent
