@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.worldprompt.kernel.CoreLimits;
+import dev.worldprompt.kernel.PromptRequest;
+import dev.worldprompt.mycelium.world_replay.v1.model.ReplayTraversal;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -49,6 +52,33 @@ class ReplayPayloadTest {
     }
     @Test void emptyOperationsRemainRealSteps() {
         assertEquals(0, ReplayPayload.parse(payload()).operations.getFirst().runs().length);
+    }
+    @Test void retainedProgramProtectsInspectionDataAndMakesIndependentCursors() {
+        ReplayPayload.Operation operation = ReplayPayload.parse(payload(2, 3, 0)).operations.getFirst();
+        int[] inspection = operation.runs();
+        inspection[0] = 99;
+        inspection[1] = 0;
+
+        ReplayTraversal first = operation.program().cursor();
+        ReplayTraversal second = operation.program().cursor();
+        List<Integer> firstVisits = new java.util.ArrayList<>();
+        List<Integer> secondVisits = new java.util.ArrayList<>();
+        first.drain(1, recording(firstVisits));
+        second.drain(1, recording(secondVisits));
+        first.drain(2, recording(firstVisits));
+        assertEquals(List.of(2, 3, 4), firstVisits);
+        assertTrue(first.complete());
+        assertFalse(second.complete());
+        second.drain(2, recording(secondVisits));
+        assertEquals(List.of(2, 3, 4), secondVisits);
+        assertTrue(second.complete());
+    }
+
+    private static ReplayTraversal.PlacementPort recording(List<Integer> visits) {
+        return new ReplayTraversal.PlacementPort() {
+            @Override public boolean skipRun(int paletteIndex) { return false; }
+            @Override public void visit(int index, int paletteIndex) { visits.add(index); }
+        };
     }
     @Test void rejectsOutOfBoundsNegativeOverlappingOrInvalidPaletteRuns() {
         for (int[] runs : new int[][]{{9999,2,0}, {-1,1,0}, {0,0,0}, {0,1,1}, {0,1,-1}, {3,2,0,4,1,0}})

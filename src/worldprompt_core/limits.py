@@ -55,6 +55,16 @@ MAX_WORK = 80_000_000              # Block touches across all operations of a pl
 MAX_REPLAY_BYTES = 64 * 1024 * 1024  # Packed placement runs in one result.
 MAX_WORLD_COORDINATE = 30_000_000  # Absolute horizontal Minecraft world coordinate.
 
+# Optional live block catalog sent once with a modded-world job, then copied to
+# a private sidecar for the isolated planner-tools process.
+MAX_CATALOG_BYTES = 16 * 1024 * 1024
+MAX_CATALOG_VERSION_CHARS = 128
+MAX_CATALOG_BLOCKS = 65_536
+MAX_CATALOG_PROPERTIES_PER_BLOCK = 64
+MAX_CATALOG_VALUES_PER_PROPERTY = 256
+MAX_CATALOG_PROPERTIES = 1_000_000
+MAX_CATALOG_VALUES = 4_000_000
+
 # Core <-> mod HTTP.
 MAX_WORLD_BODY = 64 * 1024 * 1024  # One request body from the mod.
 MAX_MESSAGE_CHARS = 2000           # A job status or failure message.

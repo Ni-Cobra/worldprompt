@@ -1,4 +1,4 @@
-"""Private, bounded stdio MCP tools; no world, network or arbitrary file access."""
+"""Private, bounded stdio MCP tools; no live world, network or arbitrary file access."""
 from __future__ import annotations
 
 import json
@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 import sys
 
-from .block_registry import VERSION as MINECRAFT_VERSION, get_block, list_blocks
+from .block_registry import (BlockCatalog, catalog_version, current_catalog, get_block, list_blocks,
+                             read_catalog_file, using_catalog)
 from .core import validate_plan
 from . import wsl
 from .limits import (DEFAULT_CAMERA_FOV, MAX_BLOCK_PAGE, MAX_BLOCK_QUERY_CHARS, MAX_CAMERA_DISTANCE, MAX_CAMERA_FOV,
@@ -28,6 +29,14 @@ def server_command(job_dir, config):
         # An explicit import root also supports an uninstalled source checkout.
         bootstrap = 'import sys; sys.path.insert(0, ' + repr(str(Path(__file__).resolve().parents[1])) + '); from worldprompt_core.__main__ import main; sys.exit(main())'
         command = [executable, '-c', bootstrap, 'planner-tools', '--request', str(job_dir / 'request.json')]
+    # A live job's catalog is authoritative, including in this subprocess. Pass it explicitly when
+    # this scope has one: a missing sidecar is a broken job, not evidence of a legacy request, and
+    # planning against bundled vanilla would silently disagree with final validation.
+    if current_catalog() is not None:
+        catalog_path = Path(job_dir) / 'block-catalog.json'
+        if not catalog_path.is_file():
+            raise FileNotFoundError(f'This job has a live block catalog but no sidecar at {catalog_path}.')
+        command.extend(['--catalog', str(catalog_path)])
     if wsl.windows_cli(config):
         command = wsl.wsl_exec(command)
     return {'command': command[0], 'args': command[1:]}
@@ -42,10 +51,11 @@ def tool_definitions():
                                 'required': list(required), 'additionalProperties': False},
                 'annotations': {'readOnlyHint': True, 'destructiveHint': False,
                                 'idempotentHint': True, 'openWorldHint': False}}
-    return [tool('list_blocks', f'Search or paginate all Minecraft {MINECRAFT_VERSION} block IDs.',
+    version = catalog_version()
+    return [tool('list_blocks', f'Search or paginate all Minecraft {version} block IDs.',
                  {'query': {'type': 'string', 'maxLength': MAX_BLOCK_QUERY_CHARS}, 'offset': {'type': 'integer', 'minimum': 0},
                   'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_BLOCK_PAGE}}),
-            tool('get_block', f'Get accepted properties, values and defaults for a Minecraft {MINECRAFT_VERSION} block.',
+            tool('get_block', f'Get accepted properties, values and defaults for a Minecraft {version} block.',
                  {'block': {'type': 'string', 'maxLength': MAX_STATE_CHARS}}, ['block']),
             tool('validate_plan', 'Check a complete candidate plan before final submission. Fix errors and check again. Uses this job’s dimensions and limits.',
                  {'plan': {'type': 'object'}}, ['plan']),
@@ -79,16 +89,26 @@ def lectern_positions(request, dimensions):
 
 
 class PlannerTools:
-    def __init__(self, request, directory=None):
+    def __init__(self, request, directory=None, catalog: BlockCatalog | None = None):
         self.dimensions = request['volume']['dimensions']
         self.max_operations = request['limits']['max_operations']
         self.max_plan_bytes = request['limits'].get('max_plan_bytes', MAX_PLAN_BYTES)
         self.calls = 0
+        self.catalog = catalog
         from .spatial_tools import SpatialTools
         self.spatial = SpatialTools(directory, self.dimensions, self.max_operations,
                                     lecterns=lectern_positions(request, self.dimensions))
 
     def call(self, name, arguments):
+        with using_catalog(self.catalog):
+            return self._call(name, arguments)
+
+    def definitions(self):
+        """The tool list, described by this server's own catalog."""
+        with using_catalog(self.catalog):
+            return tool_definitions()
+
+    def _call(self, name, arguments):
         self.calls += 1
         if self.calls > MAX_TOOL_CALLS:
             raise ValueError(f'Planner tool call budget exhausted ({MAX_TOOL_CALLS} calls per pass)')
@@ -116,11 +136,17 @@ class PlannerTools:
         raise ValueError('Unknown tool or invalid arguments')
 
 
-def serve(request_path, input_stream=None, output_stream=None):
+def serve(request_path, input_stream=None, output_stream=None, catalog_path=None):
     input_stream = input_stream or sys.stdin.buffer
     output_stream = output_stream or sys.stdout
     request = json.loads(Path(request_path).read_text(encoding='utf-8'))
-    server = PlannerTools(request, Path(request_path).parent)
+    catalog = read_catalog_file(catalog_path) if catalog_path is not None else None
+    server = PlannerTools(request, Path(request_path).parent, catalog)
+    return _serve_loop(server, input_stream, output_stream)
+
+
+def _serve_loop(server, input_stream, output_stream):
+    # The server owns the catalog and scopes every call; see PlannerTools.call and definitions.
     limit = 1024 * 1024
     while raw := input_stream.readline(limit + 1):
         if len(raw) > limit:
@@ -144,7 +170,7 @@ def serve(request_path, input_stream=None, output_stream=None):
             elif method == 'ping':
                 result = {}
             elif method == 'tools/list':
-                result = {'tools': tool_definitions()}
+                result = {'tools': server.definitions()}
             elif method == 'tools/call':
                 try:
                     params = message.get('params', {})
@@ -158,8 +184,8 @@ def serve(request_path, input_stream=None, output_stream=None):
                 except (ValueError, TypeError, KeyError) as exc:
                     result = {'content': [{'type': 'text', 'text': str(exc)}], 'isError': True}
                 except Exception as exc:
-                    # One failing call (snapshot I/O, renderer, a malformed plan shape) must
-                    # not end the MCP server for the rest of the pass. The call stays counted.
+                    # Keep serving after an unexpected tool failure; the call still
+                    # counts toward the budget.
                     result = {'content': [{'type': 'text', 'text': f'Tool call failed ({type(exc).__name__}); adjust the arguments or continue without it.'}],
                               'isError': True}
             else:

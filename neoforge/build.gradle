@@ -1,0 +1,149 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+    id 'dev.woflo.mycelium'
+}
+
+def modProperties = new Properties()
+file('../fabric/gradle.properties').withInputStream { modProperties.load(it) }
+version = modProperties.getProperty('version')
+group = modProperties.getProperty('group')
+base.archivesName = 'worldprompt-neoforge'
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+repositories { mavenCentral() }
+// $PYTHON wins; otherwise the first of python3/python on PATH. Windows prefers python, since its
+// python3.exe is often the Microsoft Store stub.
+def windows = System.getProperty('os.name').startsWith('Windows')
+def pythonNames = windows ? ['python.exe', 'python3.exe'] : ['python3', 'python']
+def pythonCommand = System.getenv('PYTHON') ?: pythonNames.findResult { name ->
+    (System.getenv('PATH') ?: '').split(File.pathSeparator).findResult { dir ->
+        def candidate = new File(dir, name)
+        candidate.isFile() && candidate.canExecute() ? candidate.absolutePath : null
+    }
+} ?: pythonNames[0]
+def generatedGameTests = layout.buildDirectory.dir('generated/sources/gametest/java')
+def generateGameTests = tasks.register('generateGameTests', Exec) {
+    inputs.dir('../fabric/src/gametest/java')
+    inputs.file('../tools/generate_gametests.py')
+    inputs.file('../fabric/src/gametest/resources/data/worldprompt-test/test_environment/catalog.json')
+    outputs.dir(generatedGameTests)
+    commandLine(pythonCommand, '../tools/generate_gametests.py',
+            '--source-root', '../fabric/src/gametest/java',
+            '--output-dir', generatedGameTests.get().asFile.absolutePath)
+}
+sourceSets {
+    main {
+        java.srcDirs('../common/src/main/java', '../pure/src/main/java')
+        resources.srcDir('../common/src/main/resources')
+    }
+    test {
+        java.srcDir('../fabric/src/test/java')
+        resources.srcDir('../fabric/src/test/resources')
+    }
+    gametest {
+        java.srcDir(generateGameTests)
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+neoForge {
+    version = '26.3.0.92'
+    addModdingDependenciesTo(sourceSets.test)
+    addModdingDependenciesTo(sourceSets.gametest)
+    runs {
+        server { server(); programArgument '--nogui' }
+        client { client(); gameDirectory = file('runs/client') }
+        gameTestServer {
+            type = 'gameTestServer'
+            sourceSet = sourceSets.gametest
+            gameDirectory = file('build/run/gameTest')
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'worldprompt'
+            systemProperty 'worldprompt.schemas', file('../src/worldprompt_core/schemas').absolutePath
+        }
+        packagedServer {
+            server()
+            programArgument '--nogui'
+            gameDirectory = file(providers.gradleProperty('worldpromptLaneServerDir')
+                    .getOrElse(file('build/run/packagedLane').absolutePath))
+            // The lane stages the release jar in this run directory's ordinary mods folder.
+            loadedMods.set([])
+        }
+    }
+    mods {
+        worldprompt {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.gametest
+        }
+    }
+}
+
+// ModDev's `mods.worldprompt` source sets are global. The GameTest run needs both
+// outputs in one mod folder so its generated tests share the main JPMS module, but
+// ordinary development runs must not discover those test classes. Override only
+// the server/client run coordinates after ModDev has populated its defaults.
+def worldPromptMainModClasses = providers.provider {
+    def folders = sourceSets.main.output.classesDirs.files.collect {
+        "worldprompt%%${it.absolutePath}"
+    }
+    if (sourceSets.main.output.resourcesDir != null) {
+        folders.add("worldprompt%%${sourceSets.main.output.resourcesDir.absolutePath}")
+    }
+    folders.join(File.pathSeparator)
+}
+gradle.projectsEvaluated {
+    ['server', 'client'].each { runName ->
+        neoForge.runs.getByName(runName).environment.put('MOD_CLASSES', worldPromptMainModClasses)
+    }
+}
+
+mycelium {
+    namespace = 'dev.worldprompt.mycelium'
+    minecraft = modProperties.getProperty('minecraft_version')
+    loader = 'neoforge'
+    contracts('command.authorization@1', 'world.replay@1', 'block.catalog@2')
+    bridges {
+        conformance('gametest')
+        conformanceClassesOutOfJar()
+    }
+    pure {
+        sources.from(file('../pure/src/main/java'))
+        release = 25
+        strict = true
+    }
+}
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.13.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+    options.encoding = 'UTF-8'
+}
+test { useJUnitPlatform() }
+tasks.named('processGametestResources') {
+    from('../fabric/src/gametest/resources') { include 'data/worldprompt-test/function/**' }
+}
+processResources {
+    inputs.property 'version', project.version
+    filesMatching(['META-INF/neoforge.mods.toml', 'dev/worldprompt/version.txt']) { expand version: project.version }
+}
+tasks.withType(Jar).matching { it.name in ['jar', 'sourcesJar'] }.configureEach {
+    from('../LICENSE') { rename { 'LICENSE_worldprompt' } }
+    from(mycelium.root.file('LICENSE')) { rename { 'LICENSE_mycelium' } }
+    from('../mycelium.lock') { into 'META-INF/mycelium' }
+}
+tasks.named('check') { dependsOn 'runGameTestServer' }
+tasks.named('runGameTestServer') {
+    doFirst {
+        def run = file('build/run/gameTest')
+        run.mkdirs()
+        new File(run, 'eula.txt').text = 'eula=true\n'
+        def config = new File(run, 'config')
+        config.mkdirs()
+        new File(config, 'neoforge-synced.toml').text = 'permissionHandler = "worldprompt:gametest"\n'
+    }
+}

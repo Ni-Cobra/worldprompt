@@ -1,6 +1,7 @@
 package dev.worldprompt;
 
 import static org.junit.jupiter.api.Assertions.*;
+import dev.worldprompt.kernel.TextSanitizer;
 import org.junit.jupiter.api.Test;
 
 class TextSanitizerTest {

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$root"
+java_command=java
+if [ -n "${JAVA_HOME:-}" ]; then java_command="$JAVA_HOME/bin/java"; fi
+if [ "$#" -eq 0 ]; then set -- --help; fi
+exec "$java_command" -jar tools/mycelium/mycelium-wrapper.jar "$@" --root .

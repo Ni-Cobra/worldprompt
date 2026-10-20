@@ -7,7 +7,7 @@ How to run WorldPrompt from source, test it, build the release artifacts and cut
 | For | You need |
 |---|---|
 | Core | Python 3.11 or newer (CI and the packaged builds use 3.12). On Debian/Ubuntu install `python3-venv` |
-| The mod | Java 25. The Gradle wrapper downloads everything else, including Minecraft, on first use |
+| The mod | Java 25, Git and Python 3.11 or newer. Bootstrap Mycelium before building. NeoForge uses Python to adapt GameTests: `$PYTHON` if set, else `python3` or `python` from `PATH`. The Gradle wrapper downloads Gradle and Minecraft dependencies on first use. |
 | Running a real plan | The Codex CLI or Claude CLI, signed in. Tests and the packaged smoke test never need one |
 
 ## Run Core from source
@@ -65,16 +65,61 @@ Some tests pin contracts shared with the rest of the repository:
 ### Mod
 
 ```bash
-cd fabric
-./gradlew build                                      # JUnit + GameTests + jar
-./gradlew test --tests dev.worldprompt.OperationCenterTest   # one JUnit class
+./mycelium prepare                  # pinned compiler source
+./gradlew build                                      # both loaders, JUnit + GameTests + jars
+./gradlew :fabric:test --tests dev.worldprompt.OperationCenterTest
+./gradlew :neoforge:build                             # one loader
 ```
 
-`build` compiles the mod, runs the JUnit tests (`fabric/src/test/`), runs the GameTests (`fabric/src/gametest/`) and produces `fabric/build/libs/worldprompt-<version>.jar` plus a sources jar.
+Use Java 25. Both loader modules compile the shared `common/` and `pure/` sources with
+Mycelium. The [Mycelium guide](mycelium.md) explains the source layout, compiler pin and
+workflow. Root `build` produces `fabric/build/libs/worldprompt-fabric-<version>.jar` and
+`neoforge/build/libs/worldprompt-neoforge-<version>.jar`, along with sources jars. Each
+loader also has a wrapper for focused development.
 
-**GameTests** are Minecraft's in-game test framework: Loom starts a disposable dedicated server with the mod loaded, runs each test in a generated world and shuts down. That server lives under `fabric/build/run/gameTest/`, so tests never open or modify your installed Minecraft saves. The tests drive the real command and placement code against `FakeCore`, a scripted stand-in for Core, with `Chat` capturing player messages and `TickBudget` bounding waits in ticks. One GameTest compares the live game's block registry with Core's bundled schema (`src/worldprompt_core/schemas`), so it fails if the registry and the mod drift apart. JUnit's `ReplayPayloadTest` parses the golden `fabric/src/test/resources/complete-result.json`, the same file `test_protocol_fixture.py` checks from the Python side.
+Both loaders run the same JUnit sources (`fabric/src/test/`) and behavioral GameTests
+(`fabric/src/gametest/`). NeoForge's `generateGameTests` adapts the test registrations and
+native permission fixture to its framework; it preserves the shared test bodies and rejects
+unconverted Fabric dependencies. Generated test code stays under `neoforge/build/` and
+never enters a release jar.
 
-To try the mod in a real client, copy the jar from `fabric/build/libs/` into an instance's `mods` folder with Fabric API, and run Core from source; the mod finds it through `connection.json`.
+Catalog tests register a test-only block through each loader's native registry setup. They
+check property domains and defaults, HTTP submission, modded-block placement and undo. A
+separate no-op test environment isolates the asynchronous catalog round trip from the
+distance and sound scenario. The NeoForge adapter checks the environment resource before
+translating the registration, so changes to that resource need a matching native mapping.
+
+**GameTests** use Minecraft's in-game test framework. Fabric Loom and NeoForge ModDev each
+start a disposable dedicated server, run the tests in a generated world and shut down. The
+servers live under their loader's `build/run/gameTest/` directory and do not touch installed
+Minecraft saves. Tests exercise the command and placement code against `FakeCore`, a scripted
+stand-in for Core. `Chat` captures player messages, and `TickBudget` bounds waits in ticks.
+One test compares the live block registry with Core's bundled schema
+(`src/worldprompt_core/schemas`). JUnit's `ReplayPayloadTest` parses
+`fabric/src/test/resources/complete-result.json`, also checked by Python's
+`test_protocol_fixture.py`.
+
+For ordinary client development, run either loader directly:
+
+```bash
+./gradlew :fabric:runClient
+./gradlew :neoforge:runClient
+```
+
+These runs load WorldPrompt's main sources. Fabric keeps its game files in `fabric/run/client/`; NeoForge uses
+`neoforge/runs/client/`. Both directories are ignored by Git. The lane hook and GameTests belong to separate test runs.
+
+To check a release jar, put it in a fresh Minecraft instance for that loader. Fabric also needs Fabric API. Start Core
+under the same OS user; the mod finds it through `connection.json`. A single-player world with commands enabled can
+exercise selection, planning, placement, undo and rebuild through the normal chat commands.
+
+For the real Fabric client/server path, use the [runtime lane](../tools/lane/README.md):
+build Fabric, then run `python tools/lane/lane.py gen` to generate its run configurations.
+Run `python tools/lane/lane.py up`, followed by `python tools/lane/lane.py smoke`,
+`python tools/lane/lane.py edges` and `python tools/lane/lane.py down`. Its local Core
+fixture supplies repeatable plans without a model account. Inspect the lane's assertions,
+client observations and screenshots when a scenario fails. The lane uses a separate
+temporary game world and does not prove a different loader or Minecraft version.
 
 ## Build Core bundles
 
@@ -128,9 +173,9 @@ This produces `dist/worldprompt_core-<version>-py3-none-any.whl`. It includes th
 | Job | Runs on | Steps |
 |---|---|---|
 | `core` | Ubuntu 22.04, Windows 2022 (Python 3.12) | `pip install ".[test,build]"`, `pytest -q`, `scripts/build_core.py` (with the glibc 2.35 limit on Linux), wheel (Linux only); uploads the archives and wheel |
-| `fabric` | Ubuntu 22.04 (Temurin 25) | `./gradlew build`; uploads the mod jar |
+| `mod` (Fabric and NeoForge matrix) | Ubuntu 22.04 (Temurin 25, Python 3.12) | Bootstrap the pinned compiler; `./gradlew :<loader>:build`; upload that loader's mod jar (`worldprompt-<loader>-<version>.jar`) |
 
-A change that passes `pytest -q` and `./gradlew build` locally has passed the same checks CI runs.
+Run `pytest -q` and `./gradlew build` locally before submitting. CI also builds and smoke-tests native Core bundles on Linux and Windows; those packaging checks need their respective operating systems.
 
 ## Releases
 
@@ -141,21 +186,24 @@ Version locations:
 | Component | Locations |
 |---|---|
 | Core | `pyproject.toml`, `src/worldprompt_core/__init__.py`, the footer in `src/worldprompt_core/static/index.html` |
-| Mod | `fabric/gradle.properties`, plus `fabric/README.md` (the `targets Minecraft` line, jar names and the `Use Core X with mod Y` sentence) |
-| Both | The Download table links and the "Current versions" line in `README.md` |
+| Mod (both loaders) | `fabric/gradle.properties`, plus `fabric/README.md` (the `targets Minecraft` line, jar names and the `Use Core X with mod Y` sentence) and `neoforge/README.md` (jar name and the Core version) |
+| Both | The Download table links and the "Current versions" line in `README.md`, the fake Core version in `tools/lane/lane.py`, and the jar name in `tools/lane/README.md` |
+
+Fabric and NeoForge are one component. They read `fabric/gradle.properties`, so they always carry the same version and are released together; see the [README](../README.md#versioning).
 
 `tests/test_version_sync.py` fails when these disagree.
 
-To release, merge the version-bump commit into `master`, then push a tag for each component being released:
+To release, merge the version-bump commit into `master`, then push a tag for each component being released. The mod's two loader tags are pushed as a pair, at the same version and on the same commit:
 
 ```bash
 git tag core-vX.Y.Z   && git push origin core-vX.Y.Z      # Core
 git tag fabric-vX.Y.Z && git push origin fabric-vX.Y.Z    # Fabric mod
+git tag neoforge-vX.Y.Z && git push origin neoforge-vX.Y.Z # NeoForge mod
 ```
 
 Plain `vX.Y.Z` tags are ignored. `.github/workflows/release.yml` then:
 
-1. Checks the tag against the source: `pyproject.toml` and `__init__.py` for `core-v*`, `fabric/gradle.properties` for `fabric-v*`. A mismatch fails the run.
+1. Checks the tag against the source: `pyproject.toml` and `__init__.py` for `core-v*`, `fabric/gradle.properties` for both loader tags. A mismatch fails the run. For a loader tag it also holds the shared mod component: if the other loader's tag exists it must name the same version and the same commit, and this commit must not already be tagged for that loader at a different version. It cannot require the sibling tag itself, since whichever is pushed first arrives alone; pushing both is the policy, not a gate.
 2. Calls `build.yml` for that component only, which runs the full checks above.
 3. Creates a draft GitHub release named for the component and version. It attaches `SHA256SUMS.txt` and the build outputs: the Windows zip, Linux tarball and wheel for Core, or the mod jar (not the sources jar) for the mod. Generated notes cover changes since the previous tag of the same component. Any unexpected file in the output aborts the release.
 
@@ -171,4 +219,4 @@ A provider is a `Provider` subclass in `src/worldprompt_core/providers.py` that 
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening one, run `python -m pytest -q`, and `./gradlew build` if you touched `fabric/`. Keep the docs in `docs/` in step with behavior changes; they are what the tests and the mod are written against. For anything large, talk to the maintainers first on [Discord](https://discord.gg/p5aHPnXAgB).
+Issues and pull requests are welcome. Before opening one, run `python -m pytest -q`, and `./gradlew build` if you touched the Java mod or its build. Keep the docs in `docs/` in step with behavior changes; they are what the tests and the mod are written against. For anything large, talk to the maintainers first on [Discord](https://discord.gg/p5aHPnXAgB).

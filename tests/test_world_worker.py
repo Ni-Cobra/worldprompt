@@ -20,13 +20,16 @@ args = sys.argv[2:]
 request = json.load(sys.stdin)
 output = pathlib.Path(args[args.index("--output-last-message") + 1])
 phase = request["phase"]
-output.with_name("fake-call.json").write_text(json.dumps({"pid": os.getpid(), "phase": phase, "args": args}))
+output.with_name("fake-call.json").write_text(json.dumps({"pid": os.getpid(), "phase": phase, "args": args, "request": request}))
 if mode == "hang":
     time.sleep(60)
 if mode == "fail_review" and phase == "review":
     print("fixture review failed", file=sys.stderr)
     sys.exit(1)
-if phase == "draft":
+if mode == "modded":
+    operations = [{"op": "fill", "min": [0, 0, 0], "max": [0, 0, 0],
+                   "block": "test:color_block[tone=cyan]"}]
+elif phase == "draft":
     operations = [{"op": "fill", "min": [1, 1, 1], "max": [1, 1, 1], "block": "minecraft:gold_block"}]
 else:
     operations = [
@@ -40,7 +43,7 @@ print(json.dumps({"type": "turn.completed", "usage": {"input_tokens": 100, "outp
 '''
 
 
-def start_worker(tmp_path, effort="normal", mode="ok", *, saved_settings=False):
+def start_worker(tmp_path, effort="normal", mode="ok", *, saved_settings=False, block_catalog=None):
     fake = tmp_path / "fake_cli.py"
     fake.write_text(FAKE_CLI)
     directory = tmp_path / "job"
@@ -50,7 +53,10 @@ def start_worker(tmp_path, effort="normal", mode="ok", *, saved_settings=False):
     payload = {"dimensions": list(source.dimensions), "palette": source.palette,
                "blocks": source.blocks.ravel().tolist(), "data_version": 5000}
     request_path = directory / "request.json"
-    request_path.write_text(json.dumps({"source": payload, "prompt": "Build and carve a marker.", "effort": effort}))
+    request = {"source": payload, "prompt": "Build and carve a marker.", "effort": effort}
+    if block_catalog is not None:
+        request["block_catalog"] = block_catalog
+    request_path.write_text(json.dumps(request))
     config = {"codex_command": [sys.executable, str(fake), mode],
               "timeout_seconds": 20, "high_timeout_seconds": 20}
     if saved_settings:
@@ -160,6 +166,23 @@ def test_real_worker_review_failure_never_publishes_ready_or_draft(tmp_path, mod
     assert not (directory / "replay" / "manifest.json").exists()
     captured = snapshot_volume(json.loads((directory / "request.json").read_text())["source"])
     np.testing.assert_array_equal(captured.blocks, source.blocks)
+
+
+def test_real_worker_uses_persisted_modded_catalog_through_final_replay(tmp_path):
+    catalog = {"minecraft_version": "test-build", "blocks": {
+        "test:color_block": {"properties": {"tone": ["amber", "cyan"]}, "defaults": {"tone": "amber"}}}}
+    process, receive, directory, _ = start_worker(tmp_path, mode="modded", block_catalog=catalog)
+    events = collect(process, receive)
+    assert events[-1]["kind"] == "ready", events
+    plan = json.loads((directory / "replay" / "plan.json").read_text())
+    assert plan["operations"][0]["block"] == "test:color_block[tone=cyan]"
+    assert "test:color_block" in json.dumps(events[-1]["manifest"])
+    planner_dir = directory / "planning"
+    assert (planner_dir / "block-catalog.json").is_file()
+    request = json.loads((planner_dir / "request.json").read_text())
+    assert "block_catalog" not in request and "test:color_block" not in json.dumps(request)
+    fake_call = json.loads((planner_dir / "fake-call.json").read_text())
+    assert "test:color_block" not in json.dumps(fake_call["request"])
 
 
 def test_worker_cancellation_reaps_its_real_cli_child(tmp_path):

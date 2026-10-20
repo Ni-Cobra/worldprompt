@@ -1,6 +1,7 @@
 package dev.worldprompt;
 
 import static org.junit.jupiter.api.Assertions.*;
+import dev.worldprompt.kernel.PromptRequest;
 import org.junit.jupiter.api.Test;
 
 class PromptRequestTest {

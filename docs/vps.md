@@ -37,7 +37,7 @@ Install the [Codex CLI](https://developers.openai.com/codex/cli) or [Claude Code
 
 ## 3. Install the server and mod
 
-Install Fabric Loader and Fabric API for Minecraft 26.3, then put the `worldprompt-<version>.jar` that matches your Core in `mods/` (install steps and compatibility are in [`fabric/README.md`](../fabric/README.md)). The mod creates `config/worldprompt.json` on first launch and needs no edits for this layout.
+Install Fabric Loader and Fabric API for Minecraft 26.3, then put the `worldprompt-fabric-<version>.jar` that matches your Core in `mods/` (install steps and compatibility are in [`fabric/README.md`](../fabric/README.md)). The mod creates `config/worldprompt.json` on first launch and needs no edits for this layout.
 
 ## 4. Sign in to the CLI over SSH
 

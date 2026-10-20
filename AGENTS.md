@@ -11,7 +11,7 @@ WorldPrompt lets Minecraft players build with their own ChatGPT (Codex CLI) or C
 - **Core** (`src/worldprompt_core/`, Python): a local app with a browser settings page.
   It receives a captured selection from the mod, plans a build through the provider CLI,
   validates the plan and compiles an ordered replay. Core never touches the world.
-- **The Fabric mod** (`fabric/`, Java, Minecraft 26.3): the `/wp` commands. It captures
+- **The mod** (`common/`, `pure/`, `fabric/`, `neoforge/`, Java, Minecraft 26.3): the `/wp` commands. It captures
   the selection, sends it to Core, places the replay over server ticks and keeps undo and
   rebuild history. The mod never talks to a model.
 
@@ -27,26 +27,36 @@ tests and the mod are written against, so keep them current when behavior change
 | [`docs/planner.md`](docs/planner.md) | Providers, planning passes, plan operations, planner tools, limits, block registry |
 | [`docs/vps.md`](docs/vps.md) | Headless Linux server install |
 | [`docs/development.md`](docs/development.md) | Building, testing, CI and releases |
+| [`docs/mycelium.md`](docs/mycelium.md) | Shared development and the selected Mycelium compiler |
+
+This project builds with Mycelium. For a cross-loader or version change, read
+[the Mycelium skill](.agents/skills/mycelium/SKILL.md), then the relevant sources and SPECs
+in the compiler checkout selected by the build. Ordinary feature work stays in the shared
+WorldPrompt sources; keep loader differences at native seams. The skill supplements this
+file and does not replace the project's behavior, security or release rules.
 
 ## Commands
 
-Python uses the repository virtual environment `.venv` (Python 3.12). This checkout is a
-WSL working copy that also has a native Windows interpreter at
-`work/venv-win/Scripts/python.exe`; use it to run the Windows half of the checks
-without leaving WSL. Other checkouts may not have it.
+Use the repository virtual environment `.venv`; Python 3.12 is tested in CI.
+On Windows its interpreter is `.venv/Scripts/python.exe`; on Linux or WSL use
+`.venv/bin/python`. Run platform-specific checks with that platform's native interpreter.
 
 ```bash
 .venv/bin/python -m pytest -q                          # full Core suite
 .venv/bin/python -m pytest tests/test_core.py -q       # one file
 .venv/bin/python -m pytest tests/test_world_jobs.py -k rebuild -q
-work/venv-win/Scripts/python.exe -m pytest -q          # same suite, native Windows
+.venv/Scripts/python.exe -m pytest -q          # same suite, native Windows
 
 .venv/bin/python scripts/build_core.py                 # Linux bundle + packaged smoke test
-work/venv-win/Scripts/python.exe scripts/build_core.py # Windows bundle + packaged smoke test
+.venv/Scripts/python.exe scripts/build_core.py # Windows bundle + packaged smoke test
 scripts/start.sh serve --no-browser                    # run Core from source
 
-cd fabric && ./gradlew build                           # Java 25: JUnit, isolated GameTests, jar
-cd fabric && ./gradlew test --tests dev.worldprompt.OperationCenterTest
+./mycelium prepare                   # from the repository root, before mod builds
+./gradlew :fabric:build                                # Java 25: JUnit, isolated GameTests, jar
+./gradlew build                                        # both loaders: JUnit, GameTests, jars
+python tools/lane/lane.py gen                           # after :fabric:build, generate lane run configs
+python tools/lane/lane.py up                            # real Fabric client/server; smoke, edges, down
+./gradlew :fabric:test --tests dev.worldprompt.OperationCenterTest
 ```
 
 `build_core.py` flags: `--skip-smoke`, `--bundle-root <dir>` (build elsewhere, e.g. while
@@ -54,7 +64,7 @@ Core runs from `dist/`), `--max-glibc` / `WORLDPROMPT_MAX_GLIBC`. The packaged s
 never uses a model account. Nothing in the test suites calls a provider: CLI providers are
 replaced with script fixtures that emit the same output shapes. Most tests are plain
 pytest; `test_agent.py` and `test_agent_integration.py` are `unittest.TestCase` classes.
-GameTest worlds stay under `fabric/build/` and never touch real Minecraft saves.
+GameTest worlds stay under each loader's `build/` and never touch real Minecraft saves.
 
 ## Invariants
 
@@ -74,7 +84,9 @@ Details are in the docs above; these are the rules that are easy to break.
   hard-code a budget or limit anywhere else. The mod mirrors the ones it checks in
   `CoreLimits.java`, kept equal by `tests/test_limits_sync.py`.
 - **Block registry** files under `src/worldprompt_core/schemas/` are generated. Regenerate
-  them only with `scripts/import_block_report.py`.
+  them only with `scripts/import_block_report.py`. They provide the offline and legacy
+  fallback. A live job's validated `block_catalog` is authoritative, including in its
+  planner-tools subprocess. Never merge another server's catalog or fallback blocks into it.
 - **Acyclic imports**, function-local imports included, enforced by
   `tests/test_import_graph.py`. No module imports another module's `_private` names.
 - **Providers.** Everything CLI-specific lives in a `Provider` subclass in
@@ -99,6 +111,13 @@ Details are in the docs above; these are the rules that are easy to break.
 
 The policy is in [`README.md#versioning`](README.md#versioning). In short, for agents:
 
+- **Fabric and NeoForge are one component, "the mod".** They read their version from the
+  same `fabric/gradle.properties`, so they always carry the same version and are released
+  together from the same commit (a matching `fabric-vX.Y.Z` / `neoforge-vX.Y.Z` pair).
+  Never bump or release one loader alone, and never give them separate version strings. The release
+  workflow rejects a loader tag that contradicts its sibling, but it cannot require a sibling that is
+  not pushed yet, so pushing both is on you.
+  Their jars are `worldprompt-fabric-<version>.jar` and `worldprompt-neoforge-<version>.jar`.
 - **Do not bump versions while working.** Normal changes, fixes and follow-ups leave every
   version string alone.
 - **Bump once per branch, only when the user says the branch is ready to merge into
@@ -112,15 +131,18 @@ The policy is in [`README.md#versioning`](README.md#versioning). In short, for a
   - major only when the user says so.
   Changes limited to docs, README, CI or agent guidance don't bump anything. An untouched
   component keeps its version even if the other's patch moves ahead.
-- Version locations, all checked by `tests/test_version_sync.py`:
+- Keep these version locations in sync. `tests/test_version_sync.py` checks the Core locations, the
+  mod's, both loader READMEs, both loader jar names and the lane's Core version:
   - Core: `pyproject.toml`, `src/worldprompt_core/__init__.py`, and the footer version in
     `src/worldprompt_core/static/index.html`.
   - Mod: `fabric/gradle.properties`.
   - `README.md`: the Download table links and the `Current versions:` line.
   - `fabric/README.md`: the `WorldPrompt X.Y.Z targets Minecraft` line, jar names and
     the `Use Core X.Y.Z with mod X.Y.Z` sentence.
+  - `neoforge/README.md`: Minecraft and NeoForge versions, jar names and the Core version.
+  - `tools/lane/lane.py`: `CORE_VERSION`, which the mod's compatibility check compares against.
   Then search the repository for the old version string to catch anything else.
-- Releases are made from `master` by pushing `core-vX.Y.Z` / `fabric-vX.Y.Z` tags. Only push
+- Releases are made from `master` by pushing `core-vX.Y.Z` / `fabric-vX.Y.Z` / `neoforge-vX.Y.Z` tags. Only push
   tags when the user asks.
 
 ## Verification
@@ -129,7 +151,9 @@ The policy is in [`README.md#versioning`](README.md#versioning). In short, for a
   - Core: the relevant pytest files while iterating, the full suite before finishing.
     Also run it with the Windows interpreter when it is available and the change could
     behave differently on Windows (processes, paths, tray, CLI discovery).
-  - Fabric: `./gradlew build` in `fabric/`.
+  - Mod: root `./gradlew build` for shared changes; a loader's `build` for its native changes.
+    Run the Fabric lane's relevant scenarios for player-visible command/world behavior;
+    inspect its assertions and logs, then stop its owned processes with `down`.
   - Packaging, launcher, tray or anything that behaves differently when frozen:
     `scripts/build_core.py` on each available native platform, with the smoke test on.
 - For the merge bump, run the full Core suite (Linux, and Windows when available) and

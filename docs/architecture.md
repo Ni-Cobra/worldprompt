@@ -1,12 +1,12 @@
 # Architecture
 
-WorldPrompt is two programs that talk over loopback HTTP: the Fabric mod, which owns the world, and WorldPrompt Core, which owns planning. This page covers the components, how a job moves through them, process isolation, the security model and where Core keeps its files.
+WorldPrompt has two programs that communicate over loopback HTTP: the mod owns the world, and WorldPrompt Core owns planning. The Fabric and NeoForge jars compile shared feature code from `common/` and JDK-only rules from `pure/`; each loader's entrypoint connects that code to native events. At build time, Mycelium imports the checked command-authorization contract and the permission bridge for the target loader. See [developing with Mycelium](mycelium.md) for details. This page describes the components, job lifecycle, process isolation, security model and Core's file locations.
 
 ## Components
 
 | Component | Language | Owns | Never does |
 |---|---|---|---|
-| Fabric mod (`fabric/`) | Java 25 | Selections, capture, placement over server ticks, undo and rebuild history, player feedback, permissions | Talk to a model |
+| Mod (`common/`, `pure/`, `fabric/`, `neoforge/`) | Java 25 | Selections, capture, placement over server ticks, undo and rebuild history, player feedback, permissions | Talk to a model |
 | WorldPrompt Core (`src/worldprompt_core/`) | Python 3.11+ | Settings GUI, job queue, worker processes, planning through a provider CLI, validation, replay compilation | Touch the world |
 | Provider CLI (Codex or Claude) | external | The model account and its sign-in | Run outside a Core worker |
 
@@ -15,7 +15,7 @@ The two programs share a Core ↔ mod API version, not code. [protocol.md](proto
 ```mermaid
 flowchart TD
     GUI[Browser settings GUI] -->|"127.0.0.1:8765 + session token"| APP[Core app: server.py]
-    MOD[Fabric mod] <-->|"127.0.0.1:8768 + adapter token"| API[world_server.py]
+    MOD[Fabric or NeoForge mod] <-->|"127.0.0.1:8768 + adapter token"| API[world_server.py]
     APP --> SUP[JobSupervisor: world_jobs.py]
     API --> SUP
     SUP -->|spawn| W[Worker process: world_worker.py]
@@ -28,7 +28,7 @@ flowchart TD
 
 ## Job lifecycle
 
-1. **Capture.** The mod captures a bounded region (palette, block indices, any prompt lecterns, the player's viewpoint) on the server tick thread. HTTP runs off-thread.
+1. **Capture.** At server startup, the mod snapshots registered block IDs, property domains and defaults. For each job, it captures a bounded region (palette, block indices, prompt lecterns and the player's viewpoint) on the server tick thread, then attaches that snapshot. HTTP runs off-thread.
 2. **Submit.** `POST /api/world/jobs` reaches `JobSupervisor.submit`, which validates the volume and lecterns before anything is stored. It then writes the immutable `request.json` and creates the job as `queued`. The same `request_id` with the same body is an idempotent retry; with a different body it is rejected.
 3. **Admission.** A full queue (`world_max_pending`) or a player at `world_max_jobs_per_player` is rejected. The per-player limit answers HTTP 409 with the code `player_job_limit`.
 4. **Work.** When fewer than `world_concurrency` workers run, the supervisor spawns a worker for the oldest queued job. The worker runs [`plan_volume`](planner.md): terrain context and previews, one or two provider passes, then `replay.compile_replay`, which applies the plan once and writes the ordered placement runs.
@@ -39,7 +39,7 @@ Job statuses, in order: `queued`, `preparing`, `planning`, then for Double pass 
 
 ### Plan, apply, replay
 
-The model returns a JSON plan, not blocks. Core validates it against the bundled block registry, applies it to a NumPy copy of the capture with `core.apply_plan`, and compiles the same application into an ordered replay: every operation's placement runs, including unchanged writes, overwrites and carving. The mod validates the whole payload, checks it against the live game registry and replays it over server ticks. Choices from block lists are made by the mod per placement, which is why replay is ordered operations and not a final diff. Plan format and operations are in [planner.md](planner.md); how the mod places and stores history is in [minecraft.md](minecraft.md).
+The model returns a JSON plan, not blocks. Each new mod job carries an immutable snapshot of its server's block IDs, property domains and defaults. Core validates the plan against that snapshot, applies it to a NumPy copy of the capture with `core.apply_plan`, then compiles the result as an ordered replay. The replay records each operation's placement runs, including unchanged writes, overwrites and carving. The mod validates the payload against the live game registry and places it over server ticks. For block lists, the mod chooses a state for each placement, so replay must preserve operation order rather than store only the final difference. Requests without a live snapshot use Core's bundled vanilla fallback. See [planner.md](planner.md) for plan format and operations, and [minecraft.md](minecraft.md) for placement and history.
 
 ### Leases, cancellation and restarts
 

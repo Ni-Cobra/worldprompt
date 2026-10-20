@@ -31,6 +31,9 @@ public final class PermissionNodeGameTest {
         GRANTS.put(operator.getUUID(), Map.of("worldprompt.command.rebuild", false));
         try {
             var plain = builder.createCommandSourceStack().withPermission(PermissionSet.NO_PERMISSIONS);
+            for (var test : dev.worldprompt.mycelium.bridges.command_authorization.conformance.AuthorizationCases.cases(
+                    WorldPrompt.permissionQuery, plain, "worldprompt.command.prompt", "worldprompt.command.info", "worldprompt.command.undo"))
+                test.run();
             context.assertTrue(wp.getChild("prompt").canUse(plain), "A granted node lets a non-operator prompt.");
             context.assertFalse(wp.getChild("info").canUse(plain), "A denied node hides an otherwise open command.");
             context.assertFalse(wp.getChild("undo").canUse(plain), "An unset node keeps the operator requirement.");

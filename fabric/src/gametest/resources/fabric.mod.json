@@ -5,7 +5,23 @@
   "name": "WorldPrompt automated world tests",
   "environment": "*",
   "entrypoints": {
-    "fabric-gametest": ["dev.worldprompt.WorldPromptGameTest", "dev.worldprompt.WorldPromptFlowTest", "dev.worldprompt.BlockPropertyRegistryTest", "dev.worldprompt.WorldPromptRegressionTest", "dev.worldprompt.WorldPromptMultiJobTest", "dev.worldprompt.LecternPromptGameTest", "dev.worldprompt.PermissionNodeGameTest"]
+    "main": [
+      "dev.worldprompt.FabricCatalogTestSetup"
+    ],
+    "fabric-gametest": [
+      "dev.worldprompt.WorldPromptGameTest",
+      "dev.worldprompt.WorldPromptFlowTest",
+      "dev.worldprompt.BlockPropertyRegistryTest",
+      "dev.worldprompt.BlockCatalogGameTest",
+      "dev.worldprompt.WorldPromptRegressionTest",
+      "dev.worldprompt.WorldPromptMultiJobTest",
+      "dev.worldprompt.LecternPromptGameTest",
+      "dev.worldprompt.PermissionNodeGameTest",
+      "dev.worldprompt.PermissionBootstrapGameTest"
+    ]
   },
-  "depends": {"worldprompt": "*", "fabric-gametest-api-v1": "*"}
+  "depends": {
+    "worldprompt": "*",
+    "fabric-gametest-api-v1": "*"
+  }
 }

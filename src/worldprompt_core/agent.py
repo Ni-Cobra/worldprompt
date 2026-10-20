@@ -1,7 +1,7 @@
 """Bounded CLI planning with saved Codex or Claude subscription sign-in.
 
 The local engine validates each returned plan against the captured block volume.
-The planner receives only offline registry and validation tools, never access to Minecraft.
+The planner receives bounded tools backed by a per-job catalog snapshot, never direct access to Minecraft.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from . import cli_process
 from .agent_types import AgentConfig, AgentError, AgentResult, is_reasoning_effort, validate_model_settings  # noqa: F401 (re-exported)
 from .cli_discovery import resolve_command
 from .core import validate_plan
+from .block_registry import VERSION, current_catalog, write_catalog_file
 from .limits import (MAX_INSPECT_BLOCKS, MAX_OPERATIONS, MAX_PREVIEW_IMAGE_BYTES, MAX_PREVIEW_IMAGES, MAX_PREVIEWS,
                      MAX_SURFACE_COLUMNS, MAX_TOOL_CALLS, number_word)
 from .spatial_tools import write_snapshot
@@ -47,8 +48,9 @@ zero based: x east, y up, z south. All region endpoints are inclusive. Bounds ar
 0 <= x < width, 0 <= y < height, 0 <= z < length. Out-of-bounds operations fail;
 there is no clipping. Preserve useful source geometry and its recognizable
 character unless the request calls for changing them. Consider scale, access, interior
-clearance, lighting, supports and coherent materials. Place safe ordinary vanilla
-blocks, using namespaced full block states where directional properties matter.
+clearance, lighting, supports and coherent materials. Place safe ordinary blocks
+from this job's registry, named below, using namespaced full block states where
+directional properties matter.
 Command blocks, structure blocks and jigsaws can be placed, but only as blank
 blocks: plans carry no NBT, so they never receive a command or structure data.
 
@@ -211,6 +213,22 @@ revising sound geometry merely to use the remaining operation budget.
 """
 
 
+def registry_instructions() -> str:
+    """Name the registry this job plans against.
+
+    The generic instructions deliberately do not claim vanilla, so this is the only
+    statement of which registry governs, and it is present from the first pass rather
+    than correcting an earlier assertion.
+    """
+    catalog = current_catalog()
+    if catalog is None:
+        return (f"This job's registry is WorldPrompt's bundled vanilla Minecraft {VERSION} catalog. "
+                "Only vanilla blocks exist for this job; a modded ID is rejected.\n")
+    return (f"This job's registry is the live Minecraft {catalog.minecraft_version} server catalog, which is "
+            "authoritative for this job. It can include registered modded blocks; use the IDs and property "
+            "values returned by list_blocks/get_block.\n")
+
+
 LECTERN_INSTRUCTIONS = """
 Lectern instructions: the request JSON includes lectern_instructions, prompt books
 the player placed on lecterns inside the captured volume. They are additional,
@@ -329,9 +347,14 @@ def generate_plan(summary: dict[str, Any], prompt: str, job_dir: Path, config: A
     except FileExistsError as exc:
         raise AgentError("Use a new unique job directory for each planning request") from exc
     (job_dir / "schema.json").write_text(json.dumps(plan_schema(config.max_operations)), encoding="utf-8")
-    instructions = INSTRUCTIONS + (LECTERN_INSTRUCTIONS if lecterns else "") + {"normal": "", "draft": HIGH_INSTRUCTIONS, "review": REVIEW_INSTRUCTIONS}[phase]
+    catalog = current_catalog()
+    instructions = (INSTRUCTIONS + registry_instructions()
+                    + (LECTERN_INSTRUCTIONS if lecterns else "")
+                    + {"normal": "", "draft": HIGH_INSTRUCTIONS, "review": REVIEW_INSTRUCTIONS}[phase])
     (job_dir / "instructions.md").write_text(instructions, encoding="utf-8")
     (job_dir / "request.json").write_text(request, encoding="utf-8")
+    if catalog is not None:
+        write_catalog_file(catalog, job_dir / "block-catalog.json")
     if source_volume is not None:
         if tuple(source_volume.dimensions) != tuple(dims):
             raise AgentError("Source snapshot dimensions must match the planning request")

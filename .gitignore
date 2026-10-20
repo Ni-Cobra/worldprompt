@@ -14,3 +14,9 @@ config.local.json
 adapter-token.txt
 connection.json
 fabric/logs/
+.mycelium/
+.gradle/
+neoforge/.gradle/
+neoforge/logs/
+neoforge/runs/
+fabric/run/

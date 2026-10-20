@@ -1,7 +1,9 @@
 pluginManagement {
+    apply from: file('../tools/mycelium/settings.gradle')
     repositories {
         maven { url = 'https://maven.fabricmc.net/' }
         gradlePluginPortal()
     }
+    plugins { id 'net.fabricmc.fabric-loom' version '1.17.20' }
 }
 rootProject.name = 'worldprompt'

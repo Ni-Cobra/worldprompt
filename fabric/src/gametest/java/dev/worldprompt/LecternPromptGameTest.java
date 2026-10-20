@@ -3,6 +3,7 @@ package dev.worldprompt;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import dev.worldprompt.kernel.RegionBounds;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

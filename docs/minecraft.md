@@ -1,6 +1,6 @@
 # Minecraft mod reference
 
-How to use and configure the WorldPrompt Fabric mod: commands, selections, jobs, undo and rebuild, prompt lecterns, the summary book, in-game feedback, permissions and `config/worldprompt.json`. For installing the mod see [`fabric/README.md`](../fabric/README.md); for the wire format between the mod and Core see [protocol.md](protocol.md).
+How to use and configure WorldPrompt on Fabric or NeoForge: commands, selections, jobs, undo and rebuild, prompt lecterns, the summary book, in-game feedback, permissions and `config/worldprompt.json`. For installation see the [Fabric guide](../fabric/README.md) or [NeoForge guide](../neoforge/README.md); for the wire format between the mod and Core see [protocol.md](protocol.md).
 
 Everything runs on the server (including single-player's integrated server). Players do not need the mod on their clients: selections, outlines, sounds and the summary book are vanilla packets and items.
 

@@ -73,7 +73,8 @@ class AdapterConfigTest {
         connectionFile(8768, Path.of("relative-token.txt"));
         assertTrue(assertThrows(IOException.class, () -> config.connection(discovery))
                 .getMessage().contains("absolute path"));
-        Files.writeString(discovery, "{\"serviceUrl\":\"file:///tmp/socket\",\"tokenFile\":\"/missing\"}");
+        Files.writeString(discovery, new Gson().toJson(Map.of(
+                "serviceUrl", "file:///tmp/socket", "tokenFile", temporary.resolve("missing").toString())));
         assertTrue(assertThrows(IOException.class, () -> config.connection(discovery))
                 .getMessage().contains("HTTP(S)"));
     }

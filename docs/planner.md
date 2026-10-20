@@ -10,7 +10,7 @@ A planning job runs inside a spawned worker process (`world_worker.py`) and call
 
 1. Core builds a summary of the captured volume, a terrain survey and preview images.
 2. It runs one or two planner passes. Each pass is one bounded run of the user's Codex or Claude CLI, which may call a private set of offline tools and returns a complete plan as JSON.
-3. Core validates the plan against the captured volume and the bundled block registry, then applies it to the source exactly once. That application compiles the replay that the mod places.
+3. Core validates the plan against the captured volume and the job's block catalog, then applies it to the source exactly once. That application compiles the replay that the mod places.
 
 Core never gives the model access to Minecraft, files or the network, and never reads provider credentials. The model sees only the data below and the [planner tools](#planner-tools). Everything the model returns is checked again locally; an invalid final plan never reaches the mod.
 
@@ -142,9 +142,9 @@ The model returns, and Core accepts, exactly this object (`operations.py` genera
 
 ### Block states and lists
 
-A block is a namespaced ID with optional properties, `minecraft:oak_stairs[facing=north,half=bottom]`, at most 512 characters. Omitted properties take the Minecraft default. Core validates the ID, property names and values against the [bundled registry](#block-registry); targets must be vanilla 26.3 blocks, though `replace` may match a modded ID present in the capture. Plans carry no block-entity data: containers are empty and command blocks have no command.
+A block is a namespaced ID with optional properties, `minecraft:oak_stairs[facing=north,half=bottom]`, at most 512 characters. Omitted properties take the Minecraft default. For a world job, Core validates the ID, property names and values against the submitted server catalog, including registered modded targets. Offline and legacy jobs use the [bundled vanilla registry](#block-registry). Plans carry no block-entity data: containers are empty and command blocks have no command.
 
-Every operation's `block` is one state or a list of 1 to 256 states. Fabric picks uniformly and independently for each placed block, so repeating an entry raises its weight. Core's previews, fit diagnostics and image renders use the **first** entry as a stand-in, and the final pattern is chosen in Minecraft. A later `replace` matches the blocks Fabric actually placed, not the stand-in; see [protocol](protocol.md) for how the replay carries this.
+Every operation's `block` is one state or a list of 1 to 256 states. The mod picks uniformly and independently for each placed block, so repeating an entry raises its weight. Core's previews, fit diagnostics and image renders use the **first** entry as a stand-in; Minecraft chooses the final pattern. A later `replace` matches the blocks the mod placed, not the stand-in. See [protocol](protocol.md) for how replay carries these choices.
 
 ## Operations
 
@@ -165,17 +165,17 @@ Rules behind the table:
 - `thickness` is an integer of at least 1. Shell operations paint only the shell and never clear the interior; use an `air` fill first to hollow a space, and a fill or `solid_cylinder` for a floor or cap of a tube.
 - `hollow_ellipsoid` needs every box dimension larger than twice `thickness`; `hollow_cylinder` needs both cross-section dimensions larger than twice `thickness`.
 - `match` is a list of 1 to 256 entries. A bare ID such as `minecraft:oak_log` matches every state of that block; an entry with properties matches that exact full state (omitted properties compared as defaults). Matching reads the volume as it was before the operation, so replacements never chain within one operation.
-- `preserve_properties` is required. When `true`, the replaced block's properties carry over if the target block supports both the property name and value (a log's `axis` survives replacement with a crimson stem); unsupported ones are dropped and explicit properties in `block` win. When `false`, only the target state is used. Unknown or modded targets inherit nothing.
+- `preserve_properties` is required. When `true`, the replaced block's properties carry over if the target block supports both the property name and value (a log's `axis` survives replacement with a crimson stem); unsupported ones are dropped and explicit properties in `block` win. When `false`, only the target state is used. Unknown targets inherit nothing; a known modded target uses its live catalog properties.
 - Adding an operation means one `OpSpec` in `operations.py` plus its geometry in `core.apply_plan`, then the mod's placement. The schema, shape check and instruction text follow from the spec.
 
 ## Planner tools
 
-The CLI starts a private stdio MCP server (`worldprompt-core planner-tools --request ...`, in `planner_tools.py` and `spatial_tools.py`) with six read-only tools. Calls are per pass and counted even when they fail.
+The CLI starts a private stdio MCP server (`worldprompt-core planner-tools --request ...`, in `planner_tools.py` and `spatial_tools.py`) with six read-only tools. Calls are per pass and counted even when they fail. A live job's server reads its bounded catalog from a private sidecar beside the tool request; the catalog itself is not copied into the model's prompt. Offline or legacy jobs use the bundled vanilla fallback.
 
 | Tool | Arguments | Result |
 |---|---|---|
-| `list_blocks` | optional `query`, `offset`, `limit` (1 to 100, default 50) | Searchable, paginated block IDs with `total` and `next_offset`. |
-| `get_block` | `block` | Accepted properties, values and defaults. Unknown IDs get suggestions. |
+| `list_blocks` | optional `query`, `offset`, `limit` (1 to 100, default 50) | Searchable, paginated IDs from this job's live catalog, or the offline vanilla fallback, with `total` and `next_offset`. |
+| `get_block` | `block` | Accepted properties, values and defaults from this job's catalog. Unknown IDs get suggestions. |
 | `validate_plan` | `plan` | `valid` plus errors naming the operation and field. Checks IDs, states, schema, bounds and workload; not physics, support or design quality. Up to 32 state errors are collected. |
 | `inspect_region` | `min`, `max` (local xyz), optional `target` | Exact states of a box, column or slice: a palette and indices ordered x fastest, then z, then y. |
 | `sample_surface` | `min`, `max` (local `[x, z]`), optional `step` (1 to 64), `target` | Per column: highest non-air block, highest standable block, highest liquid and air cells above ground, with block palette indices. Exact, not interpolated. |
@@ -198,7 +198,7 @@ A failing call (bad arguments, snapshot I/O, a renderer error) returns an error 
 
 ## Limits
 
-Every limit below is a constant in `limits.py`; settings ranges are `SETTING_RANGES` there, and their defaults come from `config.py`. The Fabric mod mirrors the limits it checks in `CoreLimits.java`, kept equal by `tests/test_limits_sync.py`.
+Every limit below is a constant in `limits.py`; settings ranges are `SETTING_RANGES` there, and their defaults come from `config.py`. The shared mod code mirrors the limits it checks in `CoreLimits.java`, kept equal by `tests/test_limits_sync.py`.
 
 | Limit | Value |
 |---|---|
@@ -228,7 +228,9 @@ Each pass records the tokens its CLI reported, and a job sums its passes. `usage
 
 ## Block registry
 
-Core bundles the Java Edition 26.3 block registry (1,286 block IDs, 35,723 states) so planning works offline. It is generated data in `src/worldprompt_core/schemas/`, shipped in the wheel and the packaged app:
+For a world job, the mod snapshots the registered block catalog from the running server and submits its Minecraft version, each block's finite property domains in the registry's own value order, and each block's default values. A block the protocol cannot represent is left out and logged, rather than failing the whole snapshot; the coarser fallbacks, where no catalog is sent at all, are in [developing with Mycelium](mycelium.md). Core validates and freezes this bounded snapshot with the immutable job request. The worker and its separate planner-tools process use that same snapshot for listing, state validation, defaults, previews, property inheritance and final replay compilation. A supplied but malformed catalog rejects the job; Core does not silently merge it with a different registry. No catalog is included in model context: the planner discovers IDs and states through the bounded MCP tools.
+
+Core also bundles the Java Edition 26.3 vanilla catalog (1,286 block IDs, 35,723 states) as an offline and legacy fallback. It is generated data in `src/worldprompt_core/schemas/`, shipped in the wheel and the packaged app:
 
 | File | Content |
 |---|---|
@@ -236,7 +238,7 @@ Core bundles the Java Edition 26.3 block registry (1,286 block IDs, 35,723 state
 | `block-defaults-26.3.json` | each block's default property values |
 | `block-registry-source-26.3.json` | the server version, download URL, SHA-1, report SHA-256 and the counts |
 
-`block_registry.py` loads them. Registry validity does not simulate Minecraft: a valid block may still need support, a neighbor or a paired half to stay in place.
+`block_registry.py` loads them when a request has no live catalog. Registry validity does not simulate Minecraft: a valid block may still need support, a neighbor or a paired half to stay in place.
 
 Regenerate only from the official server's block report. With Java 25:
 

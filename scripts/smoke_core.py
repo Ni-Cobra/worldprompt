@@ -63,24 +63,55 @@ else:
         if value == "-c" and args[i + 1].startswith("mcp_servers.worldprompt."):
             key, value = args[i + 1].split("=", 1)
             server[key.rsplit(".", 1)[1]] = json.loads(value)
+live_catalog = "--catalog" in server["args"]
+if live_catalog:
+    # The full catalog travels only through its private sidecar, never in the model request.
+    assert "block_catalog" not in request
+    assert "worldprompt-test:catalog_probe" not in json.dumps(request)
+    plan = {"version": 1, "summary": "Packaged live catalog fixture", "operations": [
+        {"op": "fill", "min": [1, 1, 1], "max": [1, 1, 1],
+         "block": "worldprompt-test:catalog_probe[label=blue,powered=true]"}
+    ]}
+    expected_id = "worldprompt-test:catalog_probe"
+    expected_state = "worldprompt-test:catalog_probe[label=blue,powered=true]"
+else:
+    expected_id = "minecraft:oak_stairs"
+    expected_state = "minecraft:stone"
 messages = [
     {"jsonrpc": "2.0", "id": 1, "method": "initialize"},
-    {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_block", "arguments": {"block": "minecraft:oak_stairs"}}},
-    {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "validate_plan", "arguments": {"plan": plan}}},
-    {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "inspect_region", "arguments": {"min": [1, 1, 1], "max": [1, 1, 1]}}},
-    {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "preview_plan", "arguments": {"plan": plan, "include_image": True}}},
-    {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "inspect_region", "arguments": {"min": [1, 1, 1], "max": [1, 1, 1], "target": "candidate"}}},
+    {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "list_blocks", "arguments": {"query": "worldprompt-test" if live_catalog else "oak_stairs"}}},
+    {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_block", "arguments": {"block": expected_id}}},
+    {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "validate_plan", "arguments": {"plan": plan}}},
+    {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "inspect_region", "arguments": {"min": [1, 1, 1], "max": [1, 1, 1]}}},
+    {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "preview_plan", "arguments": {"plan": plan, "include_image": True}}},
+    {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "inspect_region", "arguments": {"min": [1, 1, 1], "max": [1, 1, 1], "target": "candidate"}}},
 ]
+if live_catalog:
+    for match in (expected_id + "[label=violet]", "notinstalled:missing"):
+        invalid_match = json.loads(json.dumps(plan))
+        invalid_match["operations"][0].update(op="replace", match=[match], preserve_properties=True)
+        messages.append({"jsonrpc": "2.0", "id": len(messages) + 1, "method": "tools/call",
+                         "params": {"name": "validate_plan", "arguments": {"plan": invalid_match}}})
 result = subprocess.run([server["command"], *server["args"]],
                         input="\\n".join(json.dumps(m) for m in messages) + "\\n",
                         capture_output=True, text=True, check=True, timeout=30)
 responses = [json.loads(line) for line in result.stdout.splitlines()]
-assert json.loads(responses[1]["result"]["content"][0]["text"])["properties"]["facing"]
-assert json.loads(responses[2]["result"]["content"][0]["text"])["valid"]
-assert json.loads(responses[3]["result"]["content"][0]["text"])["palette"] == ["minecraft:air"]
-assert json.loads(responses[4]["result"]["content"][0]["text"])["fit_diagnostics"]["changed_voxels"] == 1
-assert responses[4]["result"]["content"][1]["type"] == "image"
-assert json.loads(responses[5]["result"]["content"][0]["text"])["palette"] == ["minecraft:stone"]
+assert [response["id"] for response in responses] == [message["id"] for message in messages]
+listed = json.loads(responses[1]["result"]["content"][0]["text"])
+assert expected_id in listed["blocks"], listed
+block = json.loads(responses[2]["result"]["content"][0]["text"])
+if live_catalog:
+    assert block["defaults"] == {"label": "amber", "powered": "false"}, block
+else:
+    assert block["properties"]["facing"]
+assert json.loads(responses[3]["result"]["content"][0]["text"])["valid"]
+assert json.loads(responses[4]["result"]["content"][0]["text"])["palette"] == ["minecraft:air"]
+assert json.loads(responses[5]["result"]["content"][0]["text"])["fit_diagnostics"]["changed_voxels"] == 1
+assert responses[5]["result"]["content"][1]["type"] == "image"
+assert json.loads(responses[6]["result"]["content"][0]["text"])["palette"] == [expected_state]
+if live_catalog:
+    assert all(not json.loads(response["result"]["content"][0]["text"])["valid"]
+               for response in responses[7:]), "Frozen catalog validator accepted an invalid or unknown modded match"
 if "--input-format" in args:
     images = [part for part in request["message"]["content"] if part["type"] == "image"]
     assert images and all(base64.b64decode(part["source"]["data"]).startswith(bytes([137,80,78,71])) for part in images)
@@ -121,13 +152,17 @@ def http(url, *, body=None, token=None, session=None, as_json=True):
         return json.loads(content) if as_json else content
 
 
-def verify_job(endpoint, token, expected_settings):
-    job = http(endpoint, token=token, body={
+def verify_job(endpoint, token, expected_settings, *, catalog=None):
+    body = {
         "request_id": str(uuid.uuid4()), "owner_id": str(uuid.uuid4()),
-        "owner_name": "PackagingSmoke", "prompt": "Place a single stone block.",
+        "owner_name": "PackagingSmoke",
+        "prompt": "Use the live registered catalog block." if catalog else "Place a single stone block.",
         "effort": "normal", "source": {"dimensions": [3, 3, 3],
         "palette": ["minecraft:air"], "blocks": [0] * 27, "data_version": 4901},
-    })
+    }
+    if catalog is not None:
+        body["block_catalog"] = catalog
+    job = http(endpoint, token=token, body=body)
     assert all(job.get(key) == value for key, value in expected_settings.items()), job
     job_url = endpoint + "/" + job["id"]
     deadline = time.monotonic() + 45
@@ -141,6 +176,10 @@ def verify_job(endpoint, token, expected_settings):
     result = http(job_url + "/result", token=token)
     assert all(result.get(key) == value for key, value in expected_settings.items()), result
     assert result["operation_count"] == 1, result
+    expected_state = ("worldprompt-test:catalog_probe[label=blue,powered=true]"
+                      if catalog is not None else "minecraft:stone")
+    assert result["plan"]["operations"][0]["block"] == expected_state
+    assert result["palette"][1] == expected_state
     import base64
     import struct
     assert result["result_version"] == 2 and result["run_encoding"] == "base64-u32le"
@@ -252,10 +291,19 @@ def smoke(command):
                         info = http(discovered["serviceUrl"] + "/api/world/info", token=token)
                         assert all(info.get(key) == value for key, value in expected.items()), info
                         verify_job(endpoint, token, expected)
+                live_catalog = {"minecraft_version": "26.3", "blocks": {
+                    "minecraft:air": {"properties": {}, "defaults": {}},
+                    "worldprompt-test:catalog_probe": {
+                        "properties": {"label": ["amber", "blue"], "powered": ["false", "true"]},
+                        "defaults": {"label": "amber", "powered": "false"},
+                    },
+                }}
+                verify_job(endpoint, token, expected, catalog=live_catalog)
                 http(gui_url + "/api/shutdown", session=session, body={})
                 assert process.wait(timeout=15) == 0
                 assert not connection_file.exists()
-                print("Core smoke passed: launcher, GUI, discovery, info, both providers, effort/fast settings, worker/replay and graceful exit.")
+                print("Core smoke passed: launcher, GUI, discovery, info, both providers, effort/fast settings, "
+                      "vanilla worker/replay, live-catalog MCP and modded replay, and graceful exit.")
             except BaseException:
                 desktop_log = directory / "localappdata/WorldPrompt/logs/core.log"
                 if desktop_log.exists():

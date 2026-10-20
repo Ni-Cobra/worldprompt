@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import dev.worldprompt.kernel.Versions;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -83,6 +84,7 @@ final class FakeCore implements AutoCloseable {
     private JsonObject publicJob(String id) {
         JsonObject request = requests.get(id);
         JsonObject body = request.deepCopy();
+        body.remove("block_catalog");
         body.addProperty("id", id);
         body.addProperty("status", states.get(id));
         body.addProperty("model", model);

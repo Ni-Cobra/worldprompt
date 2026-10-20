@@ -1,0 +1,36 @@
+// Resolve Loom's dev run tasks so the lane can start each JVM with its own directory and heap.
+allprojects {
+    tasks.matching {
+        it.name == "runClient" || it.name == "runServer" ||
+                (it.project.path == ":neoforge" && it.name == "runPackagedServer")
+    }.configureEach { task ->
+        if (!(task instanceof JavaExec)) return
+        // ModDev configures its RunGameTask classpath in exec(); expose the same resolved
+        // provider before dumping so the lane can launch the owned Java child directly.
+        if (task.hasProperty("classpathProvider")) task.classpath.from(task.classpathProvider)
+        task.doFirst {
+            def root = new File(System.getProperty("worldprompt.lane.dump", "build/lane/dump"))
+            def folder = task.project.path == ":neoforge"
+                    ? "neoforge-${task.name}" : "${task.project.name}-${task.name}"
+            def out = new File(root, folder)
+            out.mkdirs()
+            new File(out, "jvmargs.txt").text = task.allJvmArgs.join("\n")
+            new File(out, "args.txt").text = task.args.join("\n")
+            new File(out, "main.txt").text = task.mainClass.get()
+            new File(out, "workdir.txt").text = task.workingDir.absolutePath
+            new File(out, "classpath.txt").text = task.classpath.asPath
+            // Save only the explicit ModDev run environment; task.environment includes
+            // inherited user variables and can contain unrelated credentials.
+            def environment = new LinkedHashMap()
+            if (task.hasProperty("environmentProperty")) {
+                environment.putAll(task.environmentProperty.get())
+            }
+            new File(out, "environment.json").text = groovy.json.JsonOutput.prettyPrint(
+                    groovy.json.JsonOutput.toJson(environment)) + "\n"
+            new File(out, "launcher.txt").text = task.javaLauncher.isPresent()
+                    ? task.javaLauncher.get().executablePath.asFile.absolutePath : "none"
+            println "WorldPrompt lane run config dumped to ${out}"
+            throw new org.gradle.api.tasks.StopExecutionException("dumped only")
+        }
+    }
+}

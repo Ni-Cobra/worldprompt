@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from worldprompt_core import agent
-from worldprompt_core.agent import AgentConfig, AgentError, HIGH_INSTRUCTIONS, INSTRUCTIONS, REVIEW_INSTRUCTIONS, build_command, check_provider, generate_plan, plan_schema, validate_plan_shape
+from worldprompt_core.agent import AgentConfig, AgentError, HIGH_INSTRUCTIONS, INSTRUCTIONS, REVIEW_INSTRUCTIONS, build_command, check_provider, generate_plan, plan_schema, registry_instructions, validate_plan_shape
 from worldprompt_core.providers import get_provider
 
 
@@ -121,7 +121,8 @@ class AgentTests(unittest.TestCase):
         generate_plan(self.summary, "add a marker", self.root / "normal", config)
         self.assertEqual(config.max_operations, 512)
         self.assertEqual(config.reasoning_effort, "medium")
-        self.assertEqual((self.root / "normal" / "instructions.md").read_text(), INSTRUCTIONS)
+        self.assertEqual((self.root / "normal" / "instructions.md").read_text(),
+                         INSTRUCTIONS + registry_instructions())
         request = json.loads((self.root / "normal" / "request.json").read_text())
         self.assertEqual(request["phase"], "normal")
         self.assertIsNone(request["context"])
@@ -146,7 +147,8 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(request["phase"], phase)
             self.assertEqual(request["volume"], self.summary)
             self.assertEqual(request["limits"], {"max_operations": 512, "max_plan_bytes": 262_144, "target_output_tokens": 10_000})
-            self.assertEqual((self.root / phase / "instructions.md").read_text(), INSTRUCTIONS + extra)
+            self.assertEqual((self.root / phase / "instructions.md").read_text(),
+                             INSTRUCTIONS + registry_instructions() + extra)
             schema = json.loads((self.root / phase / "schema.json").read_text())
             self.assertEqual(schema["properties"]["operations"]["maxItems"], 512)
             command = build_command(self.root / phase, config)
