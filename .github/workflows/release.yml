@@ -1,9 +1,9 @@
 name: Release
 
 # Core and the mod are the two independently versioned components:
-#   core-v1.0.0     builds the Windows bundle, Linux bundle and wheel
-#   fabric-v1.0.0   builds the Fabric mod jar
-#   neoforge-v1.0.0 builds the NeoForge mod jar
+#   core-v1.1.0     builds the Windows bundle, Linux bundle and wheel
+#   fabric-v1.1.0   builds the Fabric mod jar
+#   neoforge-v1.1.0 builds the NeoForge mod jar
 # Fabric and NeoForge are one component. They share fabric/gradle.properties, so they
 # always carry the same version, and they are released together: push both loader tags at
 # the same version, on the same commit. The job below holds that — a loader tag whose

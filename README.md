@@ -31,12 +31,12 @@ WorldPrompt has two parts, the **mod** and the **core**. Downloads :
 
 | Part | File |
 |---|---|
-| **The mod** for **Fabric**, for your `mods` folder | [`worldprompt-fabric-1.0.0.jar`](https://github.com/Ni-Cobra/worldprompt/releases/download/fabric-v1.0.0/worldprompt-fabric-1.0.0.jar) |
-| **The mod** for **NeoForge**, for your `mods` folder | [`worldprompt-neoforge-1.0.0.jar`](https://github.com/Ni-Cobra/worldprompt/releases/download/neoforge-v1.0.0/worldprompt-neoforge-1.0.0.jar) |
-| **WorldPrompt Core** for Windows: the local app that talks to the AI | [`WorldPrompt-Core-1.0.0-windows-x86_64.zip`](https://github.com/Ni-Cobra/worldprompt/releases/download/core-v1.0.0/WorldPrompt-Core-1.0.0-windows-x86_64.zip) |
-| **WorldPrompt Core** for Linux | [`WorldPrompt-Core-1.0.0-linux-x86_64.tar.gz`](https://github.com/Ni-Cobra/worldprompt/releases/download/core-v1.0.0/WorldPrompt-Core-1.0.0-linux-x86_64.tar.gz) |
+| **The mod** for **Fabric**, for your `mods` folder | [`worldprompt-fabric-1.1.0.jar`](https://github.com/Ni-Cobra/worldprompt/releases/download/fabric-v1.1.0/worldprompt-fabric-1.1.0.jar) |
+| **The mod** for **NeoForge**, for your `mods` folder | [`worldprompt-neoforge-1.1.0.jar`](https://github.com/Ni-Cobra/worldprompt/releases/download/neoforge-v1.1.0/worldprompt-neoforge-1.1.0.jar) |
+| **WorldPrompt Core** for Windows: the local app that talks to the AI | [`WorldPrompt-Core-1.1.0-windows-x86_64.zip`](https://github.com/Ni-Cobra/worldprompt/releases/download/core-v1.1.0/WorldPrompt-Core-1.1.0-windows-x86_64.zip) |
+| **WorldPrompt Core** for Linux | [`WorldPrompt-Core-1.1.0-linux-x86_64.tar.gz`](https://github.com/Ni-Cobra/worldprompt/releases/download/core-v1.1.0/WorldPrompt-Core-1.1.0-linux-x86_64.tar.gz) |
 
-Current versions: **mod 1.0.0** and **Core 1.0.0**, for **Minecraft 26.3**. Patch
+Current versions: **mod 1.1.0** and **Core 1.1.0**, for **Minecraft 26.3**. Patch
 numbers can differ between the two. Older versions are on the
 [releases page](https://github.com/Ni-Cobra/worldprompt/releases).
 

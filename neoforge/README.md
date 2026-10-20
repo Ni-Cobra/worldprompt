@@ -4,9 +4,9 @@ This is the NeoForge artifact of WorldPrompt for Minecraft 26.3 and Java 25, bui
 the same commands, capture, placement and undo/rebuild implementation as Fabric.
 
 Install NeoForge 26.3.0.92 or newer for Minecraft 26.3, then place
-`worldprompt-neoforge-1.0.0.jar` in the server's `mods` folder. Install only one WorldPrompt
+`worldprompt-neoforge-1.1.0.jar` in the server's `mods` folder. Install only one WorldPrompt
 artifact. Fabric API and a Mycelium runtime are not required. Players may connect with a
-vanilla client; single-player uses the integrated server. Run WorldPrompt Core 1.0.0 on the
+vanilla client; single-player uses the integrated server. Run WorldPrompt Core 1.1.0 on the
 server machine under the same OS user.
 
 The mod uses the same `config/worldprompt.json` and Core connection discovery as Fabric.

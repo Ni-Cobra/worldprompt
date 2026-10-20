@@ -26,7 +26,7 @@ FABRIC = REPO / "fabric"
 WORK = Path(os.environ.get("WORLDPROMPT_LANE_DIR", FABRIC / "build" / "lane")).resolve()
 TOKEN = "worldprompt-lane-token-26-3-test-only"
 PLAYER = os.environ.get("WORLDPROMPT_LANE_PLAYER", "LanePlayer")
-CORE_VERSION = "1.0.0"
+CORE_VERSION = "1.1.0"
 LOCK = threading.RLock()
 SERVER_OWNER = "worldprompt-runtime-lane-server-v1"
 

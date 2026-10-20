@@ -63,7 +63,7 @@ without WorldPrompt installed. No development classes or GameTest classes are in
 
 ```powershell
 python tools/lane/neoforge_lane.py gen
-python tools/lane/neoforge_lane.py up --jar "C:\path\to\worldprompt-neoforge-1.0.0.jar"
+python tools/lane/neoforge_lane.py up --jar "C:\path\to\worldprompt-neoforge-1.1.0.jar"
 python tools/lane/neoforge_lane.py smoke
 python tools/lane/neoforge_lane.py edges
 python tools/lane/neoforge_lane.py down
